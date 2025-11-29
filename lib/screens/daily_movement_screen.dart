@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'invoice_entry_screen.dart';
 
 class DailyMovementScreen extends StatelessWidget {
   const DailyMovementScreen({super.key});
@@ -55,7 +56,15 @@ class DailyMovementScreen extends StatelessWidget {
                   icon: Icons.point_of_sale,
                   label: 'يومية المبيعات',
                   color: Colors.orange[700]!,
-                  onTap: () {}, // لا وظيفة حالياً
+                  onTap: () {
+                    // الانتقال إلى شاشة إدخال الفاتورة
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const InvoiceEntryScreen(),
+                      ),
+                    );
+                  },
                 ),
                 _buildMenuButton(
                   context,
