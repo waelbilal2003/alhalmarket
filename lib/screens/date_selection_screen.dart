@@ -18,19 +18,15 @@ class DateSelectionScreen extends StatefulWidget {
 class _DateSelectionScreenState extends State<DateSelectionScreen> {
   DateTime? _selectedDate;
 
+  // استبدل دالة _selectDate الحالية بهذه
   Future<void> _selectDate(BuildContext context) async {
+    // إزالة التخصيصات التي قد تسبب المشاكل
     final DateTime? picked = await showDatePicker(
       context: context,
       initialDate: _selectedDate ?? DateTime.now(),
       firstDate: DateTime(2020),
       lastDate: DateTime(2101),
-      builder: (BuildContext context, Widget? child) {
-        return Directionality(
-          textDirection: TextDirection.rtl,
-          child: child!,
-        );
-      },
-      locale: const Locale('ar', 'SA'),
+      // تم حذف builder و locale للتبسيط
     );
 
     if (picked != null && picked != _selectedDate) {
