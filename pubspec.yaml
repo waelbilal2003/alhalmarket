@@ -29,7 +29,7 @@ dependencies:
   intl: ^0.19.0
   
   # Local storage for settings
-  shared_preferences: 2.3.3
+  shared_preferences: 2.5.3
 
   # الحزمة التي تمكن sqflite من العمل على سطح المكتب والويب
   sqflite_common_ffi: ^2.3.0+2 

@@ -56,7 +56,7 @@ jobs:
       - name: Install Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.22.0'  # ⚠️ استخدم إصداراً مستقراً! (3.35.1 غير موجود رسمياً)
+          flutter-version: '3.35.1'  # ⚠️ استخدم إصداراً مستقراً! (3.35.1 غير موجود رسمياً)
 
       - name: Flutter Clean
         run: flutter clean
