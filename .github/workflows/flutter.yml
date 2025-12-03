@@ -76,79 +76,69 @@ jobs:
       - name: Build Windows Release
         run: flutter build windows --release
 
-      # 🔍 خطوة تصحيح مؤقتة: نعرض محتويات المجلدات لمعرفة أين توجد الملفات
+      # Debug step to see folder structure
       - name: Debug Folder Structure
         run: |
-          Write-Host "🔍 مجلد build/windows:"
-          Get-ChildItem -Path "build/windows" -Recurse | Select-Object FullName
-          
-          Write-Host "🔍 بحث عن ملفات DLL:"
-          Get-ChildItem -Path "build" -Include *.dll -Recurse | Select-Object FullName
+          Write-Host "Debugging build folders..."
+          Get-ChildItem -Path "build" -Recurse | Where-Object {$_.Name -like "*.dll" -or $_.Name -like "*.exe"} | Select-Object FullName
         shell: powershell
 
-      # ✅ الحل الذكي: نبحث عن الملفات في كل المسارات المحتملة
-      - name: Ensure All Required DLLs Exist
+      # Smart DLL collection step
+      - name: Collect Required DLLs
         run: |
-          $releaseDir = ""
-          $potentialPaths = @(
+          # Find release directory
+          $releaseDir = $null
+          $searchPaths = @(
             "build/windows/x64/runner/Release",
             "build/windows/runner/Release",
             "build/windows/x64/windows/runner/Release"
           )
           
-          # نبحث عن المسار الصحيح الذي يحتوي على .exe
-          foreach ($path in $potentialPaths) {
+          foreach ($path in $searchPaths) {
             if (Test-Path "$path/*.exe") {
               $releaseDir = $path
               break
             }
           }
           
-          if ([string]::IsNullOrEmpty($releaseDir)) {
-            Write-Host "❌ لم يتم العثور على مجلد Release!"
+          if (-not $releaseDir) {
+            Write-Host "Error: Could not find release directory with .exe file"
             exit 1
           }
           
-          Write-Host "✅ سيتم استخدام المسار: $releaseDir"
+          Write-Host "Found release directory: $releaseDir"
           
-          # 1. نسخ ملفات VC++ الأساسية (إذا لم تكن موجودة)
-          $vcFiles = @("msvcp140.dll", "vcruntime140.dll", "vcruntime140_1.dll")
-          foreach ($file in $vcFiles) {
-            $destPath = "$releaseDir\$file"
-            if (!(Test-Path $destPath)) {
-              $sourcePath = "C:\Windows\System32\$file"
-              if (Test-Path $sourcePath) {
-                Write-Host "نسخ $file من System32"
-                Copy-Item $sourcePath -Destination $releaseDir -Force
+          # Copy VC++ DLLs if missing
+          $vcDlls = @("msvcp140.dll", "vcruntime140.dll", "vcruntime140_1.dll")
+          foreach ($dll in $vcDlls) {
+            $dest = "$releaseDir\$dll"
+            if (-not (Test-Path $dest)) {
+              $src = "C:\Windows\System32\$dll"
+              if (Test-Path $src) {
+                Copy-Item $src $dest -Force
+                Write-Host "Copied $dll from System32"
               } else {
-                Write-Host "⚠️ تحذير: $file غير موجود في System32"
+                Write-Host "Warning: $dll not found in System32"
               }
-            } else {
-              Write-Host "✅ $file موجود مسبقاً"
             }
           }
           
-          # 2. البحث عن ملفات plugins في كل المسارات
-          $pluginFiles = @(
-            @{Name="pdfium.dll";         SearchPath="printing"},
-            @{Name="printing_plugin.dll"; SearchPath="printing"},
-            @{Name="sqlite3.x64.windows.dll"; SearchPath="sqlite3"}
-          )
-          
-          foreach ($plugin in $pluginFiles) {
+          # Find and copy plugin DLLs
+          $pluginDlls = @("pdfium.dll", "printing_plugin.dll", "sqlite3.x64.windows.dll")
+          foreach ($dll in $pluginDlls) {
             $found = $false
-            $searchPaths = @(
-              "$releaseDir\$($plugin.Name)",
-              "build/**/$($plugin.SearchPath)/**/$($plugin.Name)",
-              "build/**/$($plugin.Name)"
+            $searchPatterns = @(
+              "build/**/$dll",
+              "build/windows/**/$dll",
+              "build/windows/x64/**/$dll"
             )
             
-            foreach ($searchPath in $searchPaths) {
-              $files = Get-ChildItem -Path $searchPath -Recurse -ErrorAction SilentlyContinue
+            foreach ($pattern in $searchPatterns) {
+              $files = Get-ChildItem -Path $pattern -Recurse -ErrorAction SilentlyContinue
               if ($files) {
                 foreach ($file in $files) {
-                  Write-Host "نسخ $($plugin.Name) من $($file.FullName)"
-                  Copy-Item $file.FullName -Destination $releaseDir -Force
+                  Copy-Item $file.FullName "$releaseDir\$dll" -Force
+                  Write-Host "Copied $dll from $($file.FullName)"
                   $found = $true
                 }
                 break
@@ -156,35 +146,35 @@ jobs:
             }
             
             if (-not $found) {
-              Write-Host "⚠️ تحذير: $($plugin.Name) غير موجود - قد لا يعمل التطبيق بشكل كامل"
+              Write-Host "Warning: $dll not found - this plugin may not work on Windows"
             }
           }
         shell: powershell
 
-      - name: Package Windows App as ZIP
+      - name: Package as ZIP
         run: |
-          $releaseDir = ""
-          $potentialPaths = @(
+          $releaseDir = $null
+          $searchPaths = @(
             "build/windows/x64/runner/Release",
             "build/windows/runner/Release",
             "build/windows/x64/windows/runner/Release"
           )
           
-          foreach ($path in $potentialPaths) {
+          foreach ($path in $searchPaths) {
             if (Test-Path "$path/*.exe") {
               $releaseDir = $path
               break
             }
           }
           
-          if ([string]::IsNullOrEmpty($releaseDir)) {
-            Write-Host "❌ لم يتم العثور على مجلد Release!"
+          if (-not $releaseDir) {
+            Write-Host "Error: Could not find release directory for ZIP"
             exit 1
           }
           
           $zipPath = "windows-app.zip"
           Compress-Archive -Path "$releaseDir/*" -DestinationPath $zipPath -Force
-          Write-Host "✅ تم إنشاء الملف: $zipPath"
+          Write-Host "Created ZIP file: $zipPath"
         shell: powershell
 
       - name: Upload ZIP Artifact

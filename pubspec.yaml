@@ -15,7 +15,7 @@ dependencies:
   cupertino_icons: ^1.0.8
   
   # Database
-  sqflite: ^2.3.0
+  drift: ^2.18.0      # بديل حديث مع دعم كامل للـ Windows
   path: ^1.9.0
   
   # State Management
