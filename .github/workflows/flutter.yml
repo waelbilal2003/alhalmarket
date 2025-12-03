@@ -16,7 +16,7 @@ jobs:
       - name: Install Flutter
         uses: subosito/flutter-action@v2
         with:
-          channel: 'stable'  # ✅ التصحيح هنا
+          channel: 'stable'
 
       - name: Flutter Clean
         run: flutter clean
@@ -56,7 +56,7 @@ jobs:
       - name: Install Flutter
         uses: subosito/flutter-action@v2
         with:
-          channel: 'stable'  # ✅ التصحيح هنا
+          channel: 'stable'
 
       - name: Flutter Clean
         run: flutter clean
@@ -67,14 +67,51 @@ jobs:
       - name: Setup Visual Studio C++ Build Tools
         uses: ilammy/msvc-dev-cmd@v1
 
+      - name: Install VC++ Redistributable
+        run: |
+          Invoke-WebRequest -Uri "https://aka.ms/vs/17/release/vc_redist.x64.exe" -OutFile "vc_redist.x64.exe"
+          Start-Process -FilePath "./vc_redist.x64.exe" -ArgumentList "/install", "/quiet", "/norestart" -Wait
+        shell: powershell
+
       - name: Build Windows Release
         run: flutter build windows --release
 
-      - name: Upload Windows EXE Artifact
+      - name: Gather All Required DLLs
+        run: |
+          $releaseDir = "build/windows/x64/runner/Release"
+          
+          # نسخ ملفات VC++ الأساسية (إذا لم تكن موجودة)
+          $vcFiles = @("msvcp140.dll", "vcruntime140.dll", "vcruntime140_1.dll")
+          foreach ($file in $vcFiles) {
+            if (!(Test-Path "$releaseDir\$file")) {
+              Copy-Item "C:\Windows\System32\$file" -Destination $releaseDir -Force
+            }
+          }
+          
+          # نسخ ملفات plugins
+          $pluginsPath = "build/windows/x64/plugins"
+          
+          # ملفات الطباعة (package printing)
+          if (Test-Path "$pluginsPath/printing") {
+            Copy-Item "$pluginsPath/printing/pdfium.dll" -Destination $releaseDir -Force
+            Copy-Item "$pluginsPath/printing/printing_plugin.dll" -Destination $releaseDir -Force
+          }
+          
+          # ملف SQLite
+          if (Test-Path "$pluginsPath/sqlite3/sqlite3.x64.windows.dll") {
+            Copy-Item "$pluginsPath/sqlite3/sqlite3.x64.windows.dll" -Destination $releaseDir -Force
+          }
+        shell: powershell
+
+      - name: Package Windows App as ZIP
+        run: |
+          $source = "build/windows/x64/runner/Release/"
+          $destination = "windows-app.zip"
+          Compress-Archive -Path "$source*" -DestinationPath $destination -Force
+        shell: powershell
+
+      - name: Upload ZIP Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: release-windows-x64
-          path: build/windows/x64/runner/Release/
-
-      - name: Verify Flutter Installation
-        run: flutter --version
+          name: release-windows-x64-zip
+          path: windows-app.zip
