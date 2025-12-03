@@ -76,38 +76,115 @@ jobs:
       - name: Build Windows Release
         run: flutter build windows --release
 
-      - name: Gather All Required DLLs
+      # 🔍 خطوة تصحيح مؤقتة: نعرض محتويات المجلدات لمعرفة أين توجد الملفات
+      - name: Debug Folder Structure
         run: |
-          $releaseDir = "build/windows/x64/runner/Release"
+          Write-Host "🔍 مجلد build/windows:"
+          Get-ChildItem -Path "build/windows" -Recurse | Select-Object FullName
           
-          # نسخ ملفات VC++ الأساسية (إذا لم تكن موجودة)
-          $vcFiles = @("msvcp140.dll", "vcruntime140.dll", "vcruntime140_1.dll")
-          foreach ($file in $vcFiles) {
-            if (!(Test-Path "$releaseDir\$file")) {
-              Copy-Item "C:\Windows\System32\$file" -Destination $releaseDir -Force
+          Write-Host "🔍 بحث عن ملفات DLL:"
+          Get-ChildItem -Path "build" -Include *.dll -Recurse | Select-Object FullName
+        shell: powershell
+
+      # ✅ الحل الذكي: نبحث عن الملفات في كل المسارات المحتملة
+      - name: Ensure All Required DLLs Exist
+        run: |
+          $releaseDir = ""
+          $potentialPaths = @(
+            "build/windows/x64/runner/Release",
+            "build/windows/runner/Release",
+            "build/windows/x64/windows/runner/Release"
+          )
+          
+          # نبحث عن المسار الصحيح الذي يحتوي على .exe
+          foreach ($path in $potentialPaths) {
+            if (Test-Path "$path/*.exe") {
+              $releaseDir = $path
+              break
             }
           }
           
-          # نسخ ملفات plugins
-          $pluginsPath = "build/windows/x64/plugins"
-          
-          # ملفات الطباعة (package printing)
-          if (Test-Path "$pluginsPath/printing") {
-            Copy-Item "$pluginsPath/printing/pdfium.dll" -Destination $releaseDir -Force
-            Copy-Item "$pluginsPath/printing/printing_plugin.dll" -Destination $releaseDir -Force
+          if ([string]::IsNullOrEmpty($releaseDir)) {
+            Write-Host "❌ لم يتم العثور على مجلد Release!"
+            exit 1
           }
           
-          # ملف SQLite
-          if (Test-Path "$pluginsPath/sqlite3/sqlite3.x64.windows.dll") {
-            Copy-Item "$pluginsPath/sqlite3/sqlite3.x64.windows.dll" -Destination $releaseDir -Force
+          Write-Host "✅ سيتم استخدام المسار: $releaseDir"
+          
+          # 1. نسخ ملفات VC++ الأساسية (إذا لم تكن موجودة)
+          $vcFiles = @("msvcp140.dll", "vcruntime140.dll", "vcruntime140_1.dll")
+          foreach ($file in $vcFiles) {
+            $destPath = "$releaseDir\$file"
+            if (!(Test-Path $destPath)) {
+              $sourcePath = "C:\Windows\System32\$file"
+              if (Test-Path $sourcePath) {
+                Write-Host "نسخ $file من System32"
+                Copy-Item $sourcePath -Destination $releaseDir -Force
+              } else {
+                Write-Host "⚠️ تحذير: $file غير موجود في System32"
+              }
+            } else {
+              Write-Host "✅ $file موجود مسبقاً"
+            }
+          }
+          
+          # 2. البحث عن ملفات plugins في كل المسارات
+          $pluginFiles = @(
+            @{Name="pdfium.dll";         SearchPath="printing"},
+            @{Name="printing_plugin.dll"; SearchPath="printing"},
+            @{Name="sqlite3.x64.windows.dll"; SearchPath="sqlite3"}
+          )
+          
+          foreach ($plugin in $pluginFiles) {
+            $found = $false
+            $searchPaths = @(
+              "$releaseDir\$($plugin.Name)",
+              "build/**/$($plugin.SearchPath)/**/$($plugin.Name)",
+              "build/**/$($plugin.Name)"
+            )
+            
+            foreach ($searchPath in $searchPaths) {
+              $files = Get-ChildItem -Path $searchPath -Recurse -ErrorAction SilentlyContinue
+              if ($files) {
+                foreach ($file in $files) {
+                  Write-Host "نسخ $($plugin.Name) من $($file.FullName)"
+                  Copy-Item $file.FullName -Destination $releaseDir -Force
+                  $found = $true
+                }
+                break
+              }
+            }
+            
+            if (-not $found) {
+              Write-Host "⚠️ تحذير: $($plugin.Name) غير موجود - قد لا يعمل التطبيق بشكل كامل"
+            }
           }
         shell: powershell
 
       - name: Package Windows App as ZIP
         run: |
-          $source = "build/windows/x64/runner/Release/"
-          $destination = "windows-app.zip"
-          Compress-Archive -Path "$source*" -DestinationPath $destination -Force
+          $releaseDir = ""
+          $potentialPaths = @(
+            "build/windows/x64/runner/Release",
+            "build/windows/runner/Release",
+            "build/windows/x64/windows/runner/Release"
+          )
+          
+          foreach ($path in $potentialPaths) {
+            if (Test-Path "$path/*.exe") {
+              $releaseDir = $path
+              break
+            }
+          }
+          
+          if ([string]::IsNullOrEmpty($releaseDir)) {
+            Write-Host "❌ لم يتم العثور على مجلد Release!"
+            exit 1
+          }
+          
+          $zipPath = "windows-app.zip"
+          Compress-Archive -Path "$releaseDir/*" -DestinationPath $zipPath -Force
+          Write-Host "✅ تم إنشاء الملف: $zipPath"
         shell: powershell
 
       - name: Upload ZIP Artifact
