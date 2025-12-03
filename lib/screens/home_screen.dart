@@ -30,7 +30,7 @@ class HomeScreen extends StatelessWidget {
                 Theme.of(context)
                     .colorScheme
                     .primaryContainer
-                    .withValues(alpha: 0.3),
+                    .withOpacity(200 / 255),
                 Theme.of(context).colorScheme.surface,
               ],
             ),
@@ -64,7 +64,7 @@ class HomeScreen extends StatelessWidget {
                           color: Theme.of(context)
                               .colorScheme
                               .onSurface
-                              .withValues(alpha: 0.7),
+                              .withOpacity(200 / 255),
                         ),
                   ),
                   const SizedBox(height: 40),
@@ -190,7 +190,7 @@ class HomeScreen extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: color.withValues(alpha: 0.2),
+                  color: color.withOpacity(200 / 255),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Icon(

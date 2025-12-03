@@ -376,7 +376,7 @@ class _GeneralSalesScreenState extends State<GeneralSalesScreen> {
                             (states) => Theme.of(context)
                                 .colorScheme
                                 .primaryContainer
-                                .withValues(alpha: 0.5),
+                                .withOpacity(200 / 255),
                           ),
                           columns: const [
                             DataColumn(label: Text('مسلسل')),
@@ -437,7 +437,7 @@ class _GeneralSalesScreenState extends State<GeneralSalesScreen> {
                 color: Theme.of(context).colorScheme.surface,
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.1),
+                    color: Colors.black.withOpacity(200 / 255),
                     blurRadius: 4,
                     offset: const Offset(0, -2),
                   ),

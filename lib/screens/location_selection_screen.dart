@@ -40,7 +40,7 @@ class LocationSelectionScreen extends StatelessWidget {
                 Theme.of(context)
                     .colorScheme
                     .primaryContainer
-                    .withValues(alpha: 0.3),
+                    .withOpacity(200 / 255),
                 Theme.of(context).colorScheme.surface,
               ],
             ),
