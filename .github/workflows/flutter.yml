@@ -16,8 +16,7 @@ jobs:
       - name: Install Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: 'stable'
-          channel: 'stable'
+          channel: 'stable'  # ✅ التصحيح هنا
 
       - name: Flutter Clean
         run: flutter clean
@@ -25,30 +24,28 @@ jobs:
       - name: Flutter Pub Get
         run: flutter pub get
 
-      - name: Prepare Keystore
+      - name: Build APKs (Split per ABI)
         env:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+          STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
         run: |
           mkdir -p android/app
-          if [ -n "$KEYSTORE_BASE64" ]; then
-            echo "$KEYSTORE_BASE64" | base64 --decode > android/app/upload-keystore.jks
-          fi
-
-      - name: Build APKs (Split per ABI)
-        run: flutter build apk --release --split-per-abi
+          echo "$KEYSTORE_BASE64" | base64 --decode > android/app/upload-keystore.jks
+          flutter build apk --release --split-per-abi
 
       - name: Upload 32-bit APK (armeabi-v7a)
         uses: actions/upload-artifact@v4
         with:
-          name: app-armeabi-v7a-release.apk
+          name: release-apk-armeabi-v7a
           path: build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk
 
       - name: Upload 64-bit APK (arm64-v8a)
         uses: actions/upload-artifact@v4
         with:
-          name: app-arm64-v8a-release.apk
+          name: release-apk-arm64-v8a
           path: build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
-
 
   build-windows:
     runs-on: windows-latest
@@ -59,8 +56,7 @@ jobs:
       - name: Install Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: 'stable'
-          channel: 'stable'
+          channel: 'stable'  # ✅ التصحيح هنا
 
       - name: Flutter Clean
         run: flutter clean
@@ -68,7 +64,7 @@ jobs:
       - name: Flutter Pub Get
         run: flutter pub get
 
-      - name: Setup Visual Studio Build Tools
+      - name: Setup Visual Studio C++ Build Tools
         uses: ilammy/msvc-dev-cmd@v1
 
       - name: Build Windows Release
@@ -77,5 +73,8 @@ jobs:
       - name: Upload Windows EXE Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: windows-app-release
+          name: release-windows-x64
           path: build/windows/x64/runner/Release/
+
+      - name: Verify Flutter Installation
+        run: flutter --version
