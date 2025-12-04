@@ -83,7 +83,7 @@ jobs:
           Get-ChildItem -Path "build" -Recurse | Where-Object {$_.Name -like "*.dll" -or $_.Name -like "*.exe"} | Select-Object FullName
         shell: powershell
 
-      # Smart DLL collection step
+      # Smart DLL collection step (fixed to avoid overwriting)
       - name: Collect Required DLLs
         run: |
           # Find release directory
@@ -120,12 +120,22 @@ jobs:
               } else {
                 Write-Host "Warning: $dll not found in System32"
               }
+            } else {
+              Write-Host "✅ $dll already exists"
             }
           }
           
-          # Find and copy plugin DLLs
+          # Find and copy plugin DLLs (avoid overwriting)
           $pluginDlls = @("pdfium.dll", "printing_plugin.dll", "sqlite3.x64.windows.dll")
           foreach ($dll in $pluginDlls) {
+            $dest = "$releaseDir\$dll"
+            
+            # Skip if already exists
+            if (Test-Path $dest) {
+              Write-Host "✅ $dll already exists in release directory"
+              continue
+            }
+            
             $found = $false
             $searchPatterns = @(
               "build/**/$dll",
@@ -133,20 +143,25 @@ jobs:
               "build/windows/x64/**/$dll"
             )
             
-            foreach ($pattern in $searchPatterns) {
-              $files = Get-ChildItem -Path $pattern -Recurse -ErrorAction SilentlyContinue
+            :patternLoop foreach ($pattern in $searchPatterns) {
+              $files = Get-ChildItem -Path $pattern -Recurse -ErrorAction SilentlyContinue | Where-Object { $_.FullName -ne $dest }
               if ($files) {
                 foreach ($file in $files) {
-                  Copy-Item $file.FullName "$releaseDir\$dll" -Force
+                  # Avoid copying from the same directory
+                  if ($file.Directory.FullName -eq $releaseDir) {
+                    continue
+                  }
+                  
+                  Copy-Item $file.FullName $dest -Force
                   Write-Host "Copied $dll from $($file.FullName)"
                   $found = $true
+                  break :patternLoop
                 }
-                break
               }
             }
             
             if (-not $found) {
-              Write-Host "Warning: $dll not found - this plugin may not work on Windows"
+              Write-Host "⚠️ $dll not found - this plugin may not work on Windows"
             }
           }
         shell: powershell
