@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
-import 'screens/login_screen.dart'; // شاشة تسجيل الدخول
 
-void main() async {
-  WidgetsFlutterBinding.ensureInitialized();
+void main() {
   runApp(const MyApp());
 }
 
@@ -11,19 +9,15 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Al Hal Market',
-      debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: Colors.teal,
-          brightness: Brightness.light,
+    return const MaterialApp(
+      home: Scaffold(
+        body: Directionality(
+          textDirection: TextDirection.rtl,
+          child: Center(
+            child: Text('اهلا بك'),
+          ),
         ),
-        useMaterial3: true,
-        fontFamily: 'Arial',
       ),
-      // الشاشة التي ستظهر عند بدء التطبيق
-      home: const LoginScreen(),
     );
   }
 }
