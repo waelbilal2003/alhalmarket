@@ -89,13 +89,13 @@ BEGIN
     BEGIN
         BLOCK "040904e4"
         BEGIN
-            VALUE "CompanyName", "com.marketledger" "\0"
-            VALUE "FileDescription", "market_ledger" "\0"
+            VALUE "CompanyName", "com.example" "\0"
+            VALUE "FileDescription", "maher" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
-            VALUE "InternalName", "market_ledger" "\0"
-            VALUE "LegalCopyright", "Copyright (C) 2025 com.marketledger. All rights reserved." "\0"
-            VALUE "OriginalFilename", "market_ledger.exe" "\0"
-            VALUE "ProductName", "market_ledger" "\0"
+            VALUE "InternalName", "maher" "\0"
+            VALUE "LegalCopyright", "Copyright (C) 2025 com.example. All rights reserved." "\0"
+            VALUE "OriginalFilename", "maher.exe" "\0"
+            VALUE "ProductName", "maher" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
     END
