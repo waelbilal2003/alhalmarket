@@ -55,6 +55,19 @@ add_subdirectory("runner")
 
 # Generated plugin build rules, which manage building the plugins and adding
 # them to the application.
+#
+# For x86 (Win32) builds, patch the printing plugin to a no-op before loading
+# generated_plugins.cmake — pdfium has no Win32/x86 binary available.
+if(CMAKE_SIZEOF_VOID_P EQUAL 4)
+  set(_PRINTING_CMAKE
+    "${CMAKE_CURRENT_SOURCE_DIR}/flutter/ephemeral/.plugin_symlinks/printing/windows/CMakeLists.txt")
+  if(EXISTS "${_PRINTING_CMAKE}")
+    file(WRITE "${_PRINTING_CMAKE}"
+"cmake_minimum_required(VERSION 3.14)\nproject(printing_plugin LANGUAGES CXX)\n# Disabled on x86: pdfium has no Win32 binary.\nadd_library(printing_plugin INTERFACE)\nset(printing_plugin_bundled_libraries \"\" PARENT_SCOPE)\n")
+    message(STATUS "x86 build: printing plugin disabled (no pdfium x86 binary)")
+  endif()
+endif()
+
 include(flutter/generated_plugins.cmake)
 
 
