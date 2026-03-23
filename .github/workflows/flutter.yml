@@ -163,9 +163,6 @@ jobs:
       - name: Flutter Clean
         run: flutter clean
 
-      - name: Flutter Pub Get
-        run: flutter pub get
-
       - name: Setup Visual Studio C++ Build Tools (x86)
         uses: ilammy/msvc-dev-cmd@v1
         with:
@@ -177,13 +174,22 @@ jobs:
           Start-Process -FilePath "./vc_redist.x86.exe" -ArgumentList "/install", "/quiet", "/norestart" -Wait
         shell: powershell
 
+      - name: Disable printing plugin for x86 (pdfium has no x86 support)
+        run: |
+          flutter pub get
+          $pluginCmake = "flutter/ephemeral/.plugin_symlinks/printing/windows/CMakeLists.txt"
+          if (Test-Path $pluginCmake) {
+            $stub = "cmake_minimum_required(VERSION 3.14)`nproject(printing_plugin)`n# DISABLED: pdfium has no x86 binary`nadd_library(printing_plugin INTERFACE)`n"
+            Set-Content -Path $pluginCmake -Value $stub -Encoding UTF8
+            Write-Host "Printing plugin patched to no-op for x86"
+          } else {
+            Write-Host "printing plugin not found, skipping patch"
+          }
+        shell: powershell
+
       - name: Build Windows Release (x86 / 32-bit)
         run: |
           flutter build windows --release
-          $buildDir = "build/windows/x86/runner/Release"
-          New-Item -ItemType Directory -Force -Path $buildDir | Out-Null
-          
-          # Re-run CMake targeting Win32 (x86)
           $cmakeBuildDir = "build/windows/x86"
           cmake -S windows -B $cmakeBuildDir -A Win32
           cmake --build $cmakeBuildDir --config Release
