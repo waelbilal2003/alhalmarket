@@ -178,7 +178,16 @@ jobs:
         shell: powershell
 
       - name: Build Windows Release (x86 / 32-bit)
-        run: flutter build windows --release --target-platform windows-x86
+        run: |
+          flutter build windows --release
+          $buildDir = "build/windows/x86/runner/Release"
+          New-Item -ItemType Directory -Force -Path $buildDir | Out-Null
+          
+          # Re-run CMake targeting Win32 (x86)
+          $cmakeBuildDir = "build/windows/x86"
+          cmake -S windows -B $cmakeBuildDir -A Win32
+          cmake --build $cmakeBuildDir --config Release
+        shell: powershell
 
       - name: Debug Folder Structure (x86)
         run: |
