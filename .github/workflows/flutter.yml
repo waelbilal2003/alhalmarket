@@ -174,22 +174,15 @@ jobs:
           Start-Process -FilePath "./vc_redist.x86.exe" -ArgumentList "/install", "/quiet", "/norestart" -Wait
         shell: powershell
 
-      - name: Disable printing plugin for x86 (pdfium has no x86 support)
-        run: |
-          flutter pub get
-          $pluginCmake = "flutter/ephemeral/.plugin_symlinks/printing/windows/CMakeLists.txt"
-          if (Test-Path $pluginCmake) {
-            $stub = "cmake_minimum_required(VERSION 3.14)`nproject(printing_plugin)`n# DISABLED: pdfium has no x86 binary`nadd_library(printing_plugin INTERFACE)`n"
-            Set-Content -Path $pluginCmake -Value $stub -Encoding UTF8
-            Write-Host "Printing plugin patched to no-op for x86"
-          } else {
-            Write-Host "printing plugin not found, skipping patch"
-          }
-        shell: powershell
+      - name: Flutter Pub Get (x86)
+        run: flutter pub get
 
       - name: Build Windows Release (x86 / 32-bit)
         run: |
+          # flutter build generates dart artifacts (x64 exe is expected here)
           flutter build windows --release
+          # Now re-run CMake as Win32 — windows/CMakeLists.txt will auto-disable
+          # the printing plugin when CMAKE_SIZEOF_VOID_P == 4 (x86 detected)
           $cmakeBuildDir = "build/windows/x86"
           cmake -S windows -B $cmakeBuildDir -A Win32
           cmake --build $cmakeBuildDir --config Release
