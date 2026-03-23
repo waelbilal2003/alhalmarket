@@ -52,95 +52,48 @@ jobs:
             "build/windows/runner/Release",
             "build/windows/x64/windows/runner/Release"
           )
-
           foreach ($path in $searchPaths) {
-            if (Test-Path "$path/*.exe") {
-              $releaseDir = $path
-              break
-            }
+            if (Test-Path "$path/*.exe") { $releaseDir = $path; break }
           }
-
-          if (-not $releaseDir) {
-            Write-Host "Error: Could not find release directory with .exe file"
-            exit 1
-          }
-
-          Write-Host "Found release directory: $releaseDir"
+          if (-not $releaseDir) { Write-Host "Error: release dir not found"; exit 1 }
+          Write-Host "Found: $releaseDir"
 
           $vcDlls = @("msvcp140.dll", "vcruntime140.dll", "vcruntime140_1.dll")
           foreach ($dll in $vcDlls) {
             $dest = "$releaseDir\$dll"
             if (-not (Test-Path $dest)) {
               $src = "C:\Windows\System32\$dll"
-              if (Test-Path $src) {
-                Copy-Item $src $dest -Force
-                Write-Host "Copied $dll from System32"
-              } else {
-                Write-Host "Warning: $dll not found in System32"
-              }
-            } else {
-              Write-Host "✅ $dll already exists"
-            }
+              if (Test-Path $src) { Copy-Item $src $dest -Force; Write-Host "Copied $dll" }
+              else { Write-Host "Warning: $dll not found" }
+            } else { Write-Host "OK $dll" }
           }
 
           $pluginDlls = @("pdfium.dll", "printing_plugin.dll", "sqlite3.x64.windows.dll")
           foreach ($dll in $pluginDlls) {
             $dest = "$releaseDir\$dll"
-
-            if (Test-Path $dest) {
-              Write-Host "✅ $dll already exists in release directory"
-              continue
-            }
-
+            if (Test-Path $dest) { Write-Host "OK $dll"; continue }
             $found = $false
-            $searchPatterns = @(
-              "build/**/$dll",
-              "build/windows/**/$dll",
-              "build/windows/x64/**/$dll"
-            )
-
-            :patternLoop foreach ($pattern in $searchPatterns) {
+            :loop foreach ($pattern in @("build/**/$dll","build/windows/**/$dll","build/windows/x64/**/$dll")) {
               $files = Get-ChildItem -Path $pattern -Recurse -ErrorAction SilentlyContinue | Where-Object { $_.FullName -ne $dest }
               if ($files) {
-                foreach ($file in $files) {
-                  if ($file.Directory.FullName -eq $releaseDir) { continue }
-                  Copy-Item $file.FullName $dest -Force
-                  Write-Host "Copied $dll from $($file.FullName)"
-                  $found = $true
-                  break :patternLoop
+                foreach ($f in $files) {
+                  if ($f.Directory.FullName -eq $releaseDir) { continue }
+                  Copy-Item $f.FullName $dest -Force; Write-Host "Copied $dll"; $found = $true; break :loop
                 }
               }
             }
-
-            if (-not $found) {
-              Write-Host "⚠️ $dll not found - this plugin may not work on Windows"
-            }
+            if (-not $found) { Write-Host "Warning: $dll not found" }
           }
         shell: powershell
 
       - name: Package as ZIP (x64)
         run: |
           $releaseDir = $null
-          $searchPaths = @(
-            "build/windows/x64/runner/Release",
-            "build/windows/runner/Release",
-            "build/windows/x64/windows/runner/Release"
-          )
-
-          foreach ($path in $searchPaths) {
-            if (Test-Path "$path/*.exe") {
-              $releaseDir = $path
-              break
-            }
+          foreach ($path in @("build/windows/x64/runner/Release","build/windows/runner/Release","build/windows/x64/windows/runner/Release")) {
+            if (Test-Path "$path/*.exe") { $releaseDir = $path; break }
           }
-
-          if (-not $releaseDir) {
-            Write-Host "Error: Could not find release directory for ZIP"
-            exit 1
-          }
-
+          if (-not $releaseDir) { Write-Host "Error: release dir not found"; exit 1 }
           Compress-Archive -Path "$releaseDir/*" -DestinationPath "windows-app-x64.zip" -Force
-          Write-Host "Created ZIP file: windows-app-x64.zip"
         shell: powershell
 
       - name: Upload ZIP Artifact (x64)
@@ -177,12 +130,32 @@ jobs:
       - name: Flutter Pub Get (x86)
         run: flutter pub get
 
-      - name: Build Windows Release (x86 / 32-bit)
+      - name: Build Flutter dart artifacts
+        run: flutter build windows --release
+
+      - name: Strip printing plugin from generated files (not supported on x86)
         run: |
-          # flutter build generates dart artifacts (x64 exe is expected here)
-          flutter build windows --release
-          # Now re-run CMake as Win32 — windows/CMakeLists.txt will auto-disable
-          # the printing plugin when CMAKE_SIZEOF_VOID_P == 4 (x86 detected)
+          $genPlugins = "windows/flutter/generated_plugins.cmake"
+          if (Test-Path $genPlugins) {
+            $lines = Get-Content $genPlugins
+            $filtered = $lines | Where-Object { $_ -notmatch '\bprinting\b' }
+            Set-Content $genPlugins $filtered -Encoding UTF8
+            Write-Host "Patched generated_plugins.cmake"
+          }
+
+          $genReg = "windows/flutter/generated_plugin_registrant.cc"
+          if (Test-Path $genReg) {
+            $lines = Get-Content $genReg
+            $filtered = $lines | Where-Object {
+              ($_ -notmatch 'printing_plugin\.h') -and ($_ -notmatch 'PrintingPlugin')
+            }
+            Set-Content $genReg $filtered -Encoding UTF8
+            Write-Host "Patched generated_plugin_registrant.cc"
+          }
+        shell: powershell
+
+      - name: Build Windows x86 via CMake (Win32)
+        run: |
           $cmakeBuildDir = "build/windows/x86"
           cmake -S windows -B $cmakeBuildDir -A Win32
           cmake --build $cmakeBuildDir --config Release
@@ -197,99 +170,48 @@ jobs:
       - name: Collect Required DLLs (x86)
         run: |
           $releaseDir = $null
-          $searchPaths = @(
-            "build/windows/x86/runner/Release",
-            "build/windows/runner/Release"
-          )
-
-          foreach ($path in $searchPaths) {
-            if (Test-Path "$path/*.exe") {
-              $releaseDir = $path
-              break
-            }
+          foreach ($path in @("build/windows/x86/runner/Release","build/windows/runner/Release")) {
+            if (Test-Path "$path/*.exe") { $releaseDir = $path; break }
           }
+          if (-not $releaseDir) { Write-Host "Error: release dir not found"; exit 1 }
+          Write-Host "Found: $releaseDir"
 
-          if (-not $releaseDir) {
-            Write-Host "Error: Could not find release directory with .exe file"
-            exit 1
-          }
-
-          Write-Host "Found release directory: $releaseDir"
-
-          # Use SysWOW64 for 32-bit DLLs on a 64-bit host
           $vcDlls = @("msvcp140.dll", "vcruntime140.dll")
           foreach ($dll in $vcDlls) {
             $dest = "$releaseDir\$dll"
             if (-not (Test-Path $dest)) {
               $src = "C:\Windows\SysWOW64\$dll"
-              if (Test-Path $src) {
-                Copy-Item $src $dest -Force
-                Write-Host "Copied $dll from SysWOW64"
-              } else {
-                Write-Host "Warning: $dll not found in SysWOW64"
-              }
-            } else {
-              Write-Host "✅ $dll already exists"
-            }
+              if (Test-Path $src) { Copy-Item $src $dest -Force; Write-Host "Copied $dll from SysWOW64" }
+              else { Write-Host "Warning: $dll not found in SysWOW64" }
+            } else { Write-Host "OK $dll" }
           }
 
-          $pluginDlls = @("pdfium.dll", "printing_plugin.dll", "sqlite3.x86.windows.dll")
+          $pluginDlls = @("sqlite3.x86.windows.dll")
           foreach ($dll in $pluginDlls) {
             $dest = "$releaseDir\$dll"
-
-            if (Test-Path $dest) {
-              Write-Host "✅ $dll already exists in release directory"
-              continue
-            }
-
+            if (Test-Path $dest) { Write-Host "OK $dll"; continue }
             $found = $false
-            $searchPatterns = @(
-              "build/**/$dll",
-              "build/windows/**/$dll",
-              "build/windows/x86/**/$dll"
-            )
-
-            :patternLoop foreach ($pattern in $searchPatterns) {
+            :loop foreach ($pattern in @("build/**/$dll","build/windows/**/$dll","build/windows/x86/**/$dll")) {
               $files = Get-ChildItem -Path $pattern -Recurse -ErrorAction SilentlyContinue | Where-Object { $_.FullName -ne $dest }
               if ($files) {
-                foreach ($file in $files) {
-                  if ($file.Directory.FullName -eq $releaseDir) { continue }
-                  Copy-Item $file.FullName $dest -Force
-                  Write-Host "Copied $dll from $($file.FullName)"
-                  $found = $true
-                  break :patternLoop
+                foreach ($f in $files) {
+                  if ($f.Directory.FullName -eq $releaseDir) { continue }
+                  Copy-Item $f.FullName $dest -Force; Write-Host "Copied $dll"; $found = $true; break :loop
                 }
               }
             }
-
-            if (-not $found) {
-              Write-Host "⚠️ $dll not found - this plugin may not work on Windows x86"
-            }
+            if (-not $found) { Write-Host "Warning: $dll not found" }
           }
         shell: powershell
 
       - name: Package as ZIP (x86)
         run: |
           $releaseDir = $null
-          $searchPaths = @(
-            "build/windows/x86/runner/Release",
-            "build/windows/runner/Release"
-          )
-
-          foreach ($path in $searchPaths) {
-            if (Test-Path "$path/*.exe") {
-              $releaseDir = $path
-              break
-            }
+          foreach ($path in @("build/windows/x86/runner/Release","build/windows/runner/Release")) {
+            if (Test-Path "$path/*.exe") { $releaseDir = $path; break }
           }
-
-          if (-not $releaseDir) {
-            Write-Host "Error: Could not find release directory for ZIP"
-            exit 1
-          }
-
+          if (-not $releaseDir) { Write-Host "Error: release dir not found"; exit 1 }
           Compress-Archive -Path "$releaseDir/*" -DestinationPath "windows-app-x86.zip" -Force
-          Write-Host "Created ZIP file: windows-app-x86.zip"
         shell: powershell
 
       - name: Upload ZIP Artifact (x86)
