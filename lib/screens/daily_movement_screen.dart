@@ -8,6 +8,8 @@ import 'daily_movement/receipt_screen.dart';
 import 'daily_movement/box_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
+import 'bait_screen.dart';
+import 'daily_movement/invoice_type_selection_screen.dart';
 
 class DailyMovementScreen extends StatefulWidget {
   final String selectedDate;
@@ -42,7 +44,6 @@ class _DailyMovementScreenState extends State<DailyMovementScreen> {
     });
   }
 
-  // دالة للتعامل مع زر الرجوع في AppBar
   void _handleBackButton() {
     Navigator.of(context).pop();
   }
@@ -56,7 +57,8 @@ class _DailyMovementScreenState extends State<DailyMovementScreen> {
       },
       child: Scaffold(
         appBar: AppBar(
-          title: Text('الحركة اليومية - ${widget.selectedDate}',
+          title: Text(
+              'الحركة اليومية لتاريخ ${widget.selectedDate} البائع ${widget.sellerName}',
               style: const TextStyle(fontWeight: FontWeight.bold)),
           centerTitle: true,
           backgroundColor: Colors.green[600],
@@ -83,120 +85,169 @@ class _DailyMovementScreenState extends State<DailyMovementScreen> {
                         blurRadius: 3)
                   ],
                 ),
-                child: Text(
-                  'البائع: ${widget.sellerName}',
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.black87,
-                  ),
-                ),
               ),
               Expanded(
                 child: Padding(
                   padding: const EdgeInsets.symmetric(
-                      horizontal: 20.0, vertical: 5.0),
-                  child: GridView.count(
-                    crossAxisCount: 3,
-                    crossAxisSpacing: 12.0,
-                    mainAxisSpacing: 12.0,
-                    childAspectRatio: 2.25,
+                      horizontal: 10.0, vertical: 7.0),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.start,
                     children: [
-                      _buildMenuButton(context,
-                          icon: Icons.inventory,
-                          label: 'الاستلام',
-                          color: Colors.blue[700]!, onTap: () {
-                        Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (context) => ReceiptScreen(
-                                sellerName: widget.sellerName,
-                                selectedDate: widget.selectedDate,
-                                storeName: _storeName),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _buildMenuButton(context,
+                                icon: Icons.inventory,
+                                label: 'الاستلام',
+                                color: Colors.blue[700]!, onTap: () {
+                              Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (context) => ReceiptScreen(
+                                      sellerName: widget.sellerName,
+                                      selectedDate: widget.selectedDate,
+                                      storeName: _storeName),
+                                ),
+                              );
+                            }),
                           ),
-                        );
-                      }),
-                      _buildMenuButton(context,
-                          icon: Icons.point_of_sale,
-                          label: 'المبيعات',
-                          color: Colors.orange[700]!, onTap: () {
-                        Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (context) => SalesScreen(
-                                sellerName: widget.sellerName,
-                                selectedDate: widget.selectedDate,
-                                storeName: _storeName),
+                          const SizedBox(width: 12.0),
+                          Expanded(
+                            child: _buildMenuButton(context,
+                                icon: Icons.point_of_sale,
+                                label: 'المبيعات',
+                                color: Colors.orange[700]!, onTap: () {
+                              Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (context) => SalesScreen(
+                                      sellerName: widget.sellerName,
+                                      selectedDate: widget.selectedDate,
+                                      storeName: _storeName),
+                                ),
+                              );
+                            }),
                           ),
-                        );
-                      }),
-                      _buildMenuButton(context,
-                          icon: Icons.shopping_cart,
-                          label: 'المشتريات',
-                          color: Colors.red[700]!, onTap: () {
-                        Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (context) => PurchasesScreen(
-                                sellerName: widget.sellerName,
-                                selectedDate: widget.selectedDate,
-                                storeName: _storeName),
+                          const SizedBox(width: 12.0),
+                          Expanded(
+                            child: _buildMenuButton(context,
+                                icon: Icons.shopping_cart,
+                                label: 'المشتريات',
+                                color: Colors.red[700]!, onTap: () {
+                              Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (context) => PurchasesScreen(
+                                      sellerName: widget.sellerName,
+                                      selectedDate: widget.selectedDate,
+                                      storeName: _storeName),
+                                ),
+                              );
+                            }),
                           ),
-                        );
-                      }),
-                      _buildMenuButton(context,
-                          icon: Icons.account_balance,
-                          label: 'الصندوق',
-                          color: Colors.blueGrey[600]!, onTap: () {
-                        Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (context) => BoxScreen(
-                                sellerName: widget.sellerName,
-                                selectedDate: widget.selectedDate,
-                                storeName: _storeName),
+                          const SizedBox(width: 12.0),
+                          Expanded(
+                            child: _buildMenuButton(context,
+                                icon: Icons.receipt_long,
+                                label: 'الفواتير',
+                                color: Colors.indigo[700]!, onTap: () {
+                              Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (context) =>
+                                      InvoiceTypeSelectionScreen(
+                                    selectedDate: widget.selectedDate,
+                                    storeName: _storeName,
+                                  ),
+                                ),
+                              );
+                            }),
                           ),
-                        );
-                      }),
-                      _buildMenuButton(context,
-                          icon: Icons.grain,
-                          label: 'الغلة',
-                          color: Colors.purple[700]!, onTap: () {
-                        Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (context) =>
-                                DailyMovementYield.YieldScreen(
-                              sellerName: widget.sellerName,
-                              password: '******',
-                              selectedDate: widget.selectedDate,
-                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 12.0), // مسافة بين السطرين
+                      // --- السطر الثاني (4 أزرار) ---
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _buildMenuButton(context,
+                                icon: Icons.account_balance,
+                                label: 'الصندوق',
+                                color: Colors.blueGrey[600]!, onTap: () {
+                              Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (context) => BoxScreen(
+                                      sellerName: widget.sellerName,
+                                      selectedDate: widget.selectedDate,
+                                      storeName: _storeName),
+                                ),
+                              );
+                            }),
                           ),
-                        );
-                      }),
-                      _buildMenuButton(context,
-                          icon: Icons.settings,
-                          label: 'الخدمات',
-                          color: Colors.grey[600]!, onTap: () async {
-                        final isAdmin = await _isAdminSeller(widget.sellerName);
-                        if (isAdmin) {
-                          Navigator.of(context).push(
-                            MaterialPageRoute(
-                              builder: (context) => SellerManagementScreen(
-                                currentStoreName: _storeName,
-                                onLogout: () {
-                                  Navigator.of(context)
-                                      .popUntil((route) => route.isFirst);
-                                },
-                              ),
-                            ),
-                          );
-                        } else {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content:
-                                  Text('عفواً، هذه الخدمة متاحة فقط للإدارة'),
-                              backgroundColor: Colors.red,
-                              duration: Duration(seconds: 2),
-                            ),
-                          );
-                        }
-                      }),
+                          const SizedBox(width: 12.0),
+                          Expanded(
+                            child: _buildMenuButton(context,
+                                icon: Icons.grain,
+                                label: 'الغلة',
+                                color: Colors.purple[700]!, onTap: () {
+                              Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (context) =>
+                                      DailyMovementYield.YieldScreen(
+                                    sellerName: widget.sellerName,
+                                    password: '******',
+                                    selectedDate: widget.selectedDate,
+                                  ),
+                                ),
+                              );
+                            }),
+                          ),
+                          const SizedBox(width: 12.0),
+                          Expanded(
+                            child: _buildMenuButton(context,
+                                icon: Icons.inventory_2,
+                                label: 'البايت',
+                                color: Colors.teal[700]!, onTap: () {
+                              Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (context) => BaitScreen(
+                                    selectedDate: widget.selectedDate,
+                                  ),
+                                ),
+                              );
+                            }),
+                          ),
+                          const SizedBox(width: 12.0),
+                          Expanded(
+                            child: _buildMenuButton(context,
+                                icon: Icons.settings,
+                                label: 'الخدمات',
+                                color: Colors.grey[600]!, onTap: () async {
+                              final isAdmin =
+                                  await _isAdminSeller(widget.sellerName);
+                              if (isAdmin) {
+                                Navigator.of(context).push(
+                                  MaterialPageRoute(
+                                    builder: (context) =>
+                                        SellerManagementScreen(
+                                      currentStoreName: _storeName,
+                                      onLogout: () {
+                                        Navigator.of(context)
+                                            .popUntil((route) => route.isFirst);
+                                      },
+                                    ),
+                                  ),
+                                );
+                              } else {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text(
+                                        'عفواً، هذه الخدمة متاحة فقط للإدارة'),
+                                    backgroundColor: Colors.red,
+                                    duration: Duration(seconds: 2),
+                                  ),
+                                );
+                              }
+                            }),
+                          ),
+                        ],
+                      ),
                     ],
                   ),
                 ),
@@ -213,8 +264,9 @@ class _DailyMovementScreenState extends State<DailyMovementScreen> {
       required String label,
       required Color color,
       VoidCallback? onTap}) {
-    // تحديد إذا كان زر الخدمات
     final isServicesButton = label == 'الخدمات';
+    // تعديل ارتفاع الزر ليتناسب مع وجود 4 أزرار
+    final buttonHeight = (MediaQuery.of(context).size.width / 4) / 1.5;
 
     return FutureBuilder<bool>(
         future: isServicesButton
@@ -225,20 +277,10 @@ class _DailyMovementScreenState extends State<DailyMovementScreen> {
           final isEnabled = !isServicesButton || isAdmin;
 
           return InkWell(
-            onTap: isEnabled
-                ? onTap ??
-                    () {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text('تم الضغط على $label'),
-                          backgroundColor: color,
-                          duration: const Duration(seconds: 1),
-                        ),
-                      );
-                    }
-                : null,
+            onTap: isEnabled ? onTap : null,
             borderRadius: BorderRadius.circular(12),
             child: Container(
+              height: buttonHeight,
               decoration: BoxDecoration(
                 color: isEnabled ? color : Colors.grey[400],
                 borderRadius: BorderRadius.circular(12),
@@ -267,10 +309,9 @@ class _DailyMovementScreenState extends State<DailyMovementScreen> {
                       fontWeight: FontWeight.bold,
                     ),
                   ),
-                  // إضافة علامة الادمن إذا كان زر الخدمات والمسؤول هو الادمن
                   if (isServicesButton && isAdmin)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 4.0),
+                    const Padding(
+                      padding: EdgeInsets.only(top: 4.0),
                       child: Icon(
                         Icons.star,
                         size: 12,
@@ -284,13 +325,10 @@ class _DailyMovementScreenState extends State<DailyMovementScreen> {
         });
   }
 
-  // إضافة دالة للتحقق من الادمن
   Future<bool> _isAdminSeller(String sellerName) async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final adminSeller = prefs.getString('admin_seller');
-
-      // إذا لم يكن هناك ادمن مسبقاً، يتم تعيين أول بائع موجود كادمن
       if (adminSeller == null) {
         final accountsJson = prefs.getString('accounts');
         if (accountsJson != null) {
@@ -303,7 +341,6 @@ class _DailyMovementScreenState extends State<DailyMovementScreen> {
         }
         return false;
       }
-
       return adminSeller == sellerName;
     } catch (e) {
       print('خطأ في التحقق من الادمن: $e');

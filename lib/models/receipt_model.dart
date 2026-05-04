@@ -2,17 +2,19 @@ class Receipt {
   final String serialNumber;
   final String material;
   final String affiliation;
+  final String sValue;
   final String count;
   final String packaging;
   final String standing;
-  final String payment; // حقل الدفعة
-  final String load; // حقل الحمولة
-  final String sellerName; // إضافة اسم البائع لكل سجل (صف)
+  final String payment;
+  final String load;
+  final String sellerName;
 
   Receipt({
     required this.serialNumber,
     required this.material,
     required this.affiliation,
+    required this.sValue,
     required this.count,
     required this.packaging,
     required this.standing,
@@ -21,12 +23,39 @@ class Receipt {
     required this.sellerName,
   });
 
-  // تحويل من JSON إلى كائن
+  // *** إضافة دالة copyWith هنا ***
+  Receipt copyWith({
+    String? serialNumber,
+    String? material,
+    String? affiliation,
+    String? sValue,
+    String? count,
+    String? packaging,
+    String? standing,
+    String? payment,
+    String? load,
+    String? sellerName,
+  }) {
+    return Receipt(
+      serialNumber: serialNumber ?? this.serialNumber,
+      material: material ?? this.material,
+      affiliation: affiliation ?? this.affiliation,
+      sValue: sValue ?? this.sValue,
+      count: count ?? this.count,
+      packaging: packaging ?? this.packaging,
+      standing: standing ?? this.standing,
+      payment: payment ?? this.payment,
+      load: load ?? this.load,
+      sellerName: sellerName ?? this.sellerName,
+    );
+  }
+
   factory Receipt.fromJson(Map<String, dynamic> json) {
     return Receipt(
       serialNumber: json['serialNumber'] ?? '',
       material: json['material'] ?? '',
       affiliation: json['affiliation'] ?? '',
+      sValue: json['sValue'] ?? '',
       count: json['count'] ?? '',
       packaging: json['packaging'] ?? '',
       standing: json['standing'] ?? '',
@@ -36,12 +65,12 @@ class Receipt {
     );
   }
 
-  // تحويل من كائن إلى JSON
   Map<String, dynamic> toJson() {
     return {
       'serialNumber': serialNumber,
       'material': material,
       'affiliation': affiliation,
+      'sValue': sValue,
       'count': count,
       'packaging': packaging,
       'standing': standing,
@@ -71,7 +100,6 @@ class ReceiptDocument {
     required this.totals,
   });
 
-  // تحويل من JSON إلى كائن
   factory ReceiptDocument.fromJson(Map<String, dynamic> json) {
     return ReceiptDocument(
       recordNumber: json['recordNumber'] ?? '',
@@ -87,7 +115,6 @@ class ReceiptDocument {
     );
   }
 
-  // تحويل من كائن إلى JSON
   Map<String, dynamic> toJson() {
     return {
       'recordNumber': recordNumber,

@@ -1,4 +1,3 @@
-// yield_screen.dart (محدث)
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
@@ -54,9 +53,10 @@ class _YieldScreenState extends State<YieldScreen> {
     final double payments = double.tryParse(_paymentsController.text) ?? 0;
     final double collected = double.tryParse(_collectedController.text) ?? 0;
 
-    final double s = cashSales + receipts;
-    final double a = cashPurchases + payments;
-    _yield = double.parse((s - a).toStringAsFixed(2));
+    // الغلة = (المبيعات النقدية + المقبوضات) - (المشتريات النقدية + المدفوعات)
+    final double income = cashSales + receipts;
+    final double expenses = cashPurchases + payments;
+    _yield = double.parse((income - expenses).toStringAsFixed(2));
 
     if (collected == _yield) {
       _status = '';
@@ -71,12 +71,8 @@ class _YieldScreenState extends State<YieldScreen> {
   @override
   void initState() {
     super.initState();
-    // تهيئة FocusNodes
     _loginSellerNameFocus = FocusNode();
     _loginPasswordFocus = FocusNode();
-
-    // تحقق إذا كان المستخدم مسجل دخول مسبقاً
-    _checkIfLoggedIn();
 
     _cashSalesController.addListener(() => setState(_calculateYield));
     _receiptsController.addListener(() => setState(_calculateYield));
@@ -84,153 +80,102 @@ class _YieldScreenState extends State<YieldScreen> {
     _paymentsController.addListener(() => setState(_calculateYield));
     _collectedController.addListener(() => setState(_calculateYield));
 
-    // تحميل القيمة المخزنة للمقبوض منه
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      await Future.delayed(Duration(milliseconds: 100));
-      if (mounted) {
-        await _loadCollectedAmount();
+    // بدء عملية التحقق من الدخول والتحميل التلقائي
+    _checkIfLoggedIn().then((_) async {
+      if (_isLoggedIn) {
+        await _refreshData(); // المرة الأولى
+        await _refreshData(); // المرة الثانية
       }
     });
 
-    // تحميل البيانات تلقائياً إذا توفر التاريخ
-    if (widget.selectedDate != null) {
-      _loadCashPurchases();
-      _loadCashSales();
-      _loadBoxData();
-      _loadReceiptData();
-      // تحميل قائمة البائعين
-      WidgetsBinding.instance.addPostFrameCallback((_) async {
-        await _loadSellers();
-      });
-    }
+    // تحميل قائمة البائعين دائماً لشاشة الدخول
+    _loadSellers();
   }
 
-  Future<void> _loadCashPurchases() async {
-    if (widget.selectedDate == null) return;
+  // الدالة الوحيدة والموحدة لجلب كافة البيانات وتحديث الشاشة تلقائياً
+  Future<void> _refreshData() async {
+    // 1. التحقق من وجود التاريخ واسم البائع
+    final String currentSeller = _sellerNameController.text.trim();
+    if (widget.selectedDate == null || currentSeller.isEmpty || !_isLoggedIn)
+      return;
 
-    final purchaseStorage = PurchaseStorageService();
-    final currentSellerName = _sellerNameController.text;
-
-    if (currentSellerName.isEmpty) return;
+    if (mounted) setState(() => _isLoading = true);
 
     try {
-      // الحصول على إجمالي المشتريات النقدية للبائع الحالي
-      final totalCashPurchases =
-          await purchaseStorage.getCashPurchasesForSeller(
-        widget.selectedDate!,
-        currentSellerName,
-      );
+      // متغيرات لتجميع القيم محلياً
+      double totalSales = 0;
+      double totalPurchases = 0;
+      double totalBoxReceived = 0;
+      double totalBoxPaid = 0;
+      double totalReceiptPayments = 0; // (دفعة + حمولة)
 
-      setState(() {
-        _cashPurchasesController.text = totalCashPurchases.toStringAsFixed(2);
-      });
-    } catch (e) {
+      // --- أولاً: جلب المبيعات النقدية ---
+      final salesDoc =
+          await SalesStorageService().loadSalesDocument(widget.selectedDate!);
+      if (salesDoc != null) {
+        for (var sale in salesDoc.sales) {
+          if (sale.sellerName == currentSeller && sale.cashOrDebt == 'نقدي') {
+            totalSales += double.tryParse(sale.total) ?? 0;
+          }
+        }
+      }
+
+      // --- ثانياً: جلب المشتريات النقدية ---
+      final purchaseDoc = await PurchaseStorageService()
+          .loadPurchaseDocument(widget.selectedDate!);
+      if (purchaseDoc != null) {
+        for (var p in purchaseDoc.purchases) {
+          if (p.sellerName == currentSeller && p.cashOrDebt == 'نقدي') {
+            totalPurchases += double.tryParse(p.total) ?? 0;
+          }
+        }
+      }
+
+      // --- ثالثاً: جلب بيانات الصندوق (مقبوضات ومدفوعات) ---
+      final boxDoc = await BoxStorageService()
+          .loadBoxDocumentForDate(widget.selectedDate!);
+      if (boxDoc != null) {
+        for (var trans in boxDoc.transactions) {
+          if (trans.sellerName == currentSeller) {
+            totalBoxReceived += double.tryParse(trans.received) ?? 0;
+            totalBoxPaid += double.tryParse(trans.paid) ?? 0;
+          }
+        }
+      }
+
+      // --- رابعاً: جلب بيانات الاستلام (دفعة وحمولة البائع حصراً) ---
+      final receiptDoc = await ReceiptStorageService()
+          .loadReceiptDocumentForDate(widget.selectedDate!);
+      if (receiptDoc != null) {
+        // فحص كل سجل استلام داخل الملف للتحقق من صاحبه
+        for (var r in receiptDoc.receipts) {
+          // ملاحظة: التحقق من اسم البائع داخل كل سجل (Record)
+          if (r.sellerName == currentSeller) {
+            totalReceiptPayments += (double.tryParse(r.payment) ?? 0) +
+                (double.tryParse(r.load) ?? 0);
+          }
+        }
+      }
+
+      // --- خامساً: تحديث واجهة المستخدم مرة واحدة بكل القيم ---
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('خطأ في تحميل المشتريات: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        setState(() {
+          _cashSalesController.text = totalSales.toStringAsFixed(2);
+          _cashPurchasesController.text = totalPurchases.toStringAsFixed(2);
+          _receiptsController.text = totalBoxReceived.toStringAsFixed(2);
+
+          // المدفوعات = مدفوع الصندوق + (دفعة وحمولة الاستلام)
+          double finalPayments = totalBoxPaid + totalReceiptPayments;
+          _paymentsController.text = finalPayments.toStringAsFixed(2);
+
+          _calculateYield(); // حساب الغلة النهائية
+          _isLoading = false;
+        });
       }
+    } catch (e) {
+      if (mounted) setState(() => _isLoading = false);
+      debugPrint('Error in Yield Refresh: $e');
     }
-  }
-
-  Future<void> _loadCashSales() async {
-    if (widget.selectedDate == null) return;
-
-    final salesStorage = SalesStorageService();
-    final records =
-        await salesStorage.getAvailableRecords(widget.selectedDate!);
-    double totalCashSales = 0;
-
-    // الحصول على اسم البائع الحالي من تسجيل الدخول
-    final currentSellerName = _sellerNameController.text;
-
-    for (var recordNum in records) {
-      final doc =
-          await salesStorage.loadSalesDocument(widget.selectedDate!, recordNum);
-      if (doc != null) {
-        for (var sale in doc.sales) {
-          // إظهار فقط سجلات البائع الحالي
-          if (sale.sellerName == currentSellerName &&
-              sale.cashOrDebt == 'نقدي') {
-            totalCashSales += double.tryParse(sale.total) ?? 0;
-          }
-        }
-      }
-    }
-
-    setState(() {
-      _cashSalesController.text = totalCashSales.toStringAsFixed(2);
-    });
-  }
-
-  Future<void> _loadBoxData() async {
-    if (widget.selectedDate == null) return;
-
-    final boxStorage = BoxStorageService();
-    final records = await boxStorage.getAvailableRecords(widget.selectedDate!);
-
-    double totalReceived = 0;
-    double totalPaid = 0;
-
-    // الحصول على اسم البائع الحالي
-    final currentSellerName = _sellerNameController.text;
-
-    for (var recordNum in records) {
-      final doc =
-          await boxStorage.loadBoxDocument(widget.selectedDate!, recordNum);
-      if (doc != null) {
-        for (var transaction in doc.transactions) {
-          // إظهار فقط سجلات البائع الحالي
-          if (transaction.sellerName == currentSellerName) {
-            totalReceived += double.tryParse(transaction.received) ?? 0;
-            totalPaid += double.tryParse(transaction.paid) ?? 0;
-          }
-        }
-      }
-    }
-
-    setState(() {
-      _receiptsController.text = totalReceived.toStringAsFixed(2);
-      _paymentsController.text = totalPaid.toStringAsFixed(2);
-    });
-  }
-
-  Future<void> _loadReceiptData() async {
-    if (widget.selectedDate == null) return;
-
-    final receiptStorage = ReceiptStorageService();
-    final currentSellerName = _sellerNameController.text;
-
-    // طريقة أفضل: اجمع فقط سجلات البائع الحالي
-    double totalPaymentFromReceipt = 0;
-    double totalLoadFromReceipt = 0;
-
-    final records =
-        await receiptStorage.getAvailableRecords(widget.selectedDate!);
-
-    for (var recordNum in records) {
-      final doc = await receiptStorage.loadReceiptDocument(
-          widget.selectedDate!, recordNum);
-
-      if (doc != null && doc.sellerName == currentSellerName) {
-        totalPaymentFromReceipt +=
-            double.tryParse(doc.totals['totalPayment'] ?? '0') ?? 0;
-        totalLoadFromReceipt +=
-            double.tryParse(doc.totals['totalLoad'] ?? '0') ?? 0;
-      }
-    }
-
-    final double currentPaymentsFromBox =
-        double.tryParse(_paymentsController.text) ?? 0;
-    final double totalPayments =
-        currentPaymentsFromBox + totalPaymentFromReceipt + totalLoadFromReceipt;
-
-    setState(() {
-      _paymentsController.text = totalPayments.toStringAsFixed(2);
-    });
   }
 
   Future<void> _checkIfLoggedIn() async {
@@ -244,16 +189,12 @@ class _YieldScreenState extends State<YieldScreen> {
         _sellerNameController.text = savedSellerName;
       });
 
-      // تحميل قيمة المقبوض منه المحفوظة
       await _loadCollectedAmount();
 
-      // إذا تم تسجيل الدخول، تحميل البيانات
-      if (widget.selectedDate != null) {
-        _loadCashPurchases();
-        _loadCashSales();
-        _loadBoxData();
-        _loadReceiptData();
-      }
+      // التحديث التلقائي فور الدخول
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _refreshData();
+      });
     }
   }
 
@@ -274,10 +215,8 @@ class _YieldScreenState extends State<YieldScreen> {
         final sellerName = _sellerNameController.text.trim();
         final password = _passwordController.text.trim();
 
-        // التحقق من بيانات الدخول
         if (accountsMap.containsKey(sellerName) &&
             accountsMap[sellerName] == password) {
-          // حفظ حالة تسجيل الدخول
           await prefs.setBool('isLoggedIn', true);
           await prefs.setString('currentSellerName', sellerName);
 
@@ -286,15 +225,9 @@ class _YieldScreenState extends State<YieldScreen> {
             _isLoading = false;
           });
 
-          // تحميل جميع البيانات بعد تسجيل الدخول
-          await _loadCollectedAmount();
-
-          if (widget.selectedDate != null) {
-            _loadCashPurchases();
-            _loadCashSales();
-            _loadBoxData();
-            _loadReceiptData();
-          }
+          // استدعاء التحديث التلقائي مرتين فور الدخول
+          await _refreshData();
+          await _refreshData();
         } else {
           setState(() {
             _errorMessage = 'اسم البائع أو كلمة المرور غير صحيحة';
@@ -528,17 +461,11 @@ class _YieldScreenState extends State<YieldScreen> {
         centerTitle: true,
         backgroundColor: Colors.teal[600],
         foregroundColor: Colors.white,
+        // داخل AppBar في دالة _buildYieldScreen
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
-            onPressed: () {
-              if (widget.selectedDate != null) {
-                _loadCashPurchases();
-                _loadCashSales();
-                _loadBoxData();
-                _loadReceiptData();
-              }
-            },
+            onPressed: _refreshData, // استخدام الدالة الموحدة
             tooltip: 'تحديث البيانات',
           ),
           IconButton(
@@ -687,34 +614,7 @@ class _YieldScreenState extends State<YieldScreen> {
                         ],
                       ),
                     ),
-                    /*
-                   // معلومات عن الحقول
-                    Padding(
-                      padding: const EdgeInsets.symmetric(
-                          vertical: 16.0, horizontal: 8.0),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          _buildInfoItem(
-                            'مبيعات نقدية',
-                            'إجمالي المبيعات النقدية من شاشة المبيعات (لا تشمل المبيعات بالدين)',
-                          ),
-                          _buildInfoItem(
-                            'مشتريات نقدية',
-                            'إجمالي المشتريات النقدية من شاشة المشتريات',
-                          ),
-                          _buildInfoItem(
-                            'مقبوضات',
-                            'إجمالي المقبوضات من شاشة الصندوق',
-                          ),
-                          _buildInfoItem(
-                            'مدفوعات',
-                            'إجمالي المدفوعات من شاشة الصندوق + إجمالي الدفعة والحمولة من شاشة الاستلام',
-                          ),
-                        ],
-                      ),
-                    ),
-*/
+
                     // مسافة إضافية في الأسفل
                     const SizedBox(height: 40),
                   ],
@@ -727,50 +627,6 @@ class _YieldScreenState extends State<YieldScreen> {
     );
   }
 
-/*
-  Widget _buildInfoItem(String title, String description) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4.0),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: 8,
-            height: 8,
-            margin: const EdgeInsets.only(top: 6, right: 8),
-            decoration: BoxDecoration(
-              color: Colors.teal,
-              borderRadius: BorderRadius.circular(4),
-            ),
-          ),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: const TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.teal,
-                  ),
-                ),
-                Text(
-                  description,
-                  style: const TextStyle(
-                    fontSize: 10,
-                    color: Colors.grey,
-                  ),
-                  textAlign: TextAlign.start,
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-*/
   Widget _buildReadOnlyField(
     String label,
     TextEditingController controller, {

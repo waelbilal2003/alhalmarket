@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
+import 'package:flutter/services.dart' show rootBundle;
+import 'dart:async';
 import '../../models/purchase_model.dart';
 import '../../services/purchase_storage_service.dart';
 // استيراد خدمات الفهرس
@@ -9,6 +10,16 @@ import '../../services/supplier_index_service.dart';
 import '../../widgets/table_builder.dart' as TableBuilder;
 import '../../widgets/table_components.dart' as TableComponents;
 import '../../widgets/common_dialogs.dart' as CommonDialogs;
+import '../../services/enhanced_index_service.dart';
+import '../../widgets/suggestions_banner.dart';
+import '../../services/supplier_balance_tracker.dart';
+import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:io';
+import 'package:path_provider/path_provider.dart';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:share_plus/share_plus.dart';
 
 class PurchasesScreen extends StatefulWidget {
   final String sellerName;
@@ -88,6 +99,18 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
       ScrollController();
   final ScrollController _supplierSuggestionsScrollController =
       ScrollController();
+  bool _showFullScreenSuggestions = false;
+  String _currentSuggestionType = '';
+  late ScrollController
+      _horizontalSuggestionsController; // في initState قم بتعريفه: _horizontalSuggestionsController = ScrollController();
+
+  final SupplierBalanceTracker _balanceTracker = SupplierBalanceTracker();
+
+  // متغير لتأخير حساب المجاميع (debouncing)
+  Timer? _calculateTotalsDebouncer;
+  Timer? _calculateRowDebouncer;
+  bool _isCalculating = false;
+  bool _isAdmin = false;
 
   @override
   void initState() {
@@ -101,7 +124,9 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
 
     _resetTotalValues();
 
-    // إخفاء الاقتراحات عند التمرير
+    // تهيئة المتحكم (هذا ما كان ينقصك)
+    _horizontalSuggestionsController = ScrollController();
+
     _verticalScrollController.addListener(() {
       _hideAllSuggestionsImmediately();
     });
@@ -111,6 +136,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
     });
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      _checkAdminStatus();
       _loadOrCreateJournal();
       _loadAvailableDates();
       _loadJournalNumber();
@@ -120,33 +146,33 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
   @override
   void dispose() {
     _saveCurrentRecord(silent: true);
-
     for (var row in rowControllers) {
       for (var controller in row) {
         controller.dispose();
       }
     }
-
     for (var row in rowFocusNodes) {
       for (var node in row) {
         node.dispose();
       }
     }
-
     totalCountController.dispose();
     totalBaseController.dispose();
     totalNetController.dispose();
     totalGrandController.dispose();
-
     _verticalScrollController.dispose();
     _horizontalScrollController.dispose();
     _scrollController.dispose();
-
-    // تحرير متحكمات اقتراحات التمرير
     _materialSuggestionsScrollController.dispose();
     _packagingSuggestionsScrollController.dispose();
     _supplierSuggestionsScrollController.dispose();
 
+    // إغلاق المتحكم
+    _horizontalSuggestionsController.dispose();
+
+    _balanceTracker.dispose();
+    _calculateTotalsDebouncer?.cancel();
+    _calculateRowDebouncer?.cancel();
     super.dispose();
   }
 
@@ -322,10 +348,13 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
   void _updateMaterialSuggestions(int rowIndex) async {
     final query = rowControllers[rowIndex][1].text;
     if (query.length >= 1) {
-      final suggestions = await _materialIndexService.getSuggestions(query);
+      final suggestions =
+          await getEnhancedSuggestions(_materialIndexService, query);
       setState(() {
         _materialSuggestions = suggestions;
         _activeMaterialRowIndex = rowIndex;
+        _toggleFullScreenSuggestions(
+            type: 'material', show: suggestions.isNotEmpty);
       });
     } else {
       // إخفاء الاقتراحات إذا كان الحقل فارغاً
@@ -340,10 +369,13 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
   void _updatePackagingSuggestions(int rowIndex) async {
     final query = rowControllers[rowIndex][4].text;
     if (query.length >= 1) {
-      final suggestions = await _packagingIndexService.getSuggestions(query);
+      final suggestions =
+          await getEnhancedSuggestions(_packagingIndexService, query);
       setState(() {
         _packagingSuggestions = suggestions;
         _activePackagingRowIndex = rowIndex;
+        _toggleFullScreenSuggestions(
+            type: 'packaging', show: suggestions.isNotEmpty);
       });
     } else {
       // إخفاء الاقتراحات إذا كان الحقل فارغاً
@@ -358,10 +390,13 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
   void _updateSupplierSuggestions(int rowIndex) async {
     final query = rowControllers[rowIndex][2].text;
     if (query.length >= 1) {
-      final suggestions = await _supplierIndexService.getSuggestions(query);
+      final suggestions =
+          await getEnhancedSuggestions(_supplierIndexService, query);
       setState(() {
         _supplierSuggestions = suggestions;
         _activeSupplierRowIndex = rowIndex;
+        _toggleFullScreenSuggestions(
+            type: 'supplier', show: suggestions.isNotEmpty);
       });
     } else {
       // إخفاء الاقتراحات إذا كان الحقل فارغاً
@@ -498,63 +533,70 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
     }
   }
 
-// تحسين _calculateRowValues للتأكد من التحديث
   void _calculateRowValues(int rowIndex) {
     if (rowIndex >= rowControllers.length) return;
 
     final controllers = rowControllers[rowIndex];
 
-    // التأكد من تحديث الواجهة
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) {
-        setState(() {
-          try {
-            double count = (double.tryParse(controllers[3].text) ?? 0).abs();
-            double net = (double.tryParse(controllers[6].text) ?? 0).abs();
-            double price = (double.tryParse(controllers[7].text) ?? 0).abs();
+    // حساب فوري بدون تأخير للصف الواحد
+    try {
+      double count = (double.tryParse(controllers[3].text) ?? 0).abs();
+      double net = (double.tryParse(controllers[6].text) ?? 0).abs();
+      double price = (double.tryParse(controllers[7].text) ?? 0).abs();
 
-            double baseValue = net > 0 ? net : count;
-            double total = baseValue * price;
-            controllers[8].text = total.toStringAsFixed(2);
-          } catch (e) {
-            controllers[8].text = '';
-          }
-        });
+      double baseValue = net > 0 ? net : count;
+      double total = baseValue * price;
+
+      final newTotal = total.toStringAsFixed(2);
+      if (controllers[8].text != newTotal) {
+        controllers[8].text = newTotal;
       }
-    });
+    } catch (e) {
+      if (controllers[8].text.isNotEmpty) {
+        controllers[8].text = '';
+      }
+    }
   }
 
-// تحسين _calculateAllTotals
   void _calculateAllTotals() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    // إلغاء أي حساب سابق منتظر
+    _calculateTotalsDebouncer?.cancel();
+
+    // تأخير الحساب لتجنب التكرار المتعدد
+    _calculateTotalsDebouncer = Timer(const Duration(milliseconds: 50), () {
+      if (!mounted || _isCalculating) return;
+
+      _isCalculating = true;
+
+      double totalCount = 0;
+      double totalBase = 0;
+      double totalNet = 0;
+      double totalGrand = 0;
+
+      for (var controllers in rowControllers) {
+        try {
+          totalCount += double.tryParse(controllers[3].text) ?? 0;
+          totalBase += double.tryParse(controllers[5].text) ?? 0;
+          totalNet += double.tryParse(controllers[6].text) ?? 0;
+          totalGrand += double.tryParse(controllers[8].text) ?? 0;
+        } catch (e) {
+          // تجاهل الأخطاء
+        }
+      }
+
       if (mounted) {
         setState(() {
-          double totalCount = 0;
-          double totalBase = 0;
-          double totalNet = 0;
-          double totalGrand = 0;
-
-          for (var controllers in rowControllers) {
-            try {
-              totalCount += double.tryParse(controllers[3].text) ?? 0;
-              totalBase += double.tryParse(controllers[5].text) ?? 0;
-              totalNet += double.tryParse(controllers[6].text) ?? 0;
-              totalGrand += double.tryParse(controllers[8].text) ?? 0;
-            } catch (e) {
-              // تجاهل الأخطاء
-            }
-          }
-
           totalCountController.text = totalCount.toStringAsFixed(0);
           totalBaseController.text = totalBase.toStringAsFixed(2);
           totalNetController.text = totalNet.toStringAsFixed(2);
           totalGrandController.text = totalGrand.toStringAsFixed(2);
         });
       }
+
+      _isCalculating = false;
     });
   }
 
-// تعديل _loadJournal لاستخدام الدالة المساعدة
   void _loadJournal(PurchaseDocument document) {
     setState(() {
       // تنظيف المتحكمات القديمة
@@ -736,14 +778,15 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
 
   Widget _buildTableCell(TextEditingController controller, FocusNode focusNode,
       int rowIndex, int colIndex, bool isOwnedByCurrentSeller) {
-    bool isSerialField = colIndex == 0;
+    final bool enabled = _canEditRow(rowIndex);
     bool isNumericField =
         colIndex == 3 || colIndex == 5 || colIndex == 6 || colIndex == 7;
 
-    Widget cell = TableBuilder.buildTableCell(
+    return TableBuilder.buildTableCell(
       controller: controller,
       focusNode: focusNode,
-      isSerialField: isSerialField,
+      enabled: enabled, // <--- تمرير القيمة هنا لتعطيل الـ TextField
+      isSerialField: colIndex == 0,
       isNumericField: isNumericField,
       rowIndex: rowIndex,
       colIndex: colIndex,
@@ -752,422 +795,107 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
           _handleFieldSubmitted(value, rIndex, cIndex),
       onFieldChanged: (value, rIndex, cIndex) =>
           _handleFieldChanged(value, rIndex, cIndex),
-      inputFormatters: isNumericField
-          ? [
-              TableComponents.PositiveDecimalInputFormatter(),
-              FilteringTextInputFormatter.deny(RegExp(r'\.\d{3,}')),
-            ]
-          : null,
     );
-
-    // إذا لم يكن السجل مملوكاً للبائع الحالي، جعل الخلية للقراءة فقط
-    if (!isOwnedByCurrentSeller) {
-      return IgnorePointer(
-        child: Opacity(
-          opacity: 0.7,
-          child: Container(
-            decoration: BoxDecoration(
-              color: Colors.grey[100],
-            ),
-            child: cell,
-          ),
-        ),
-      );
-    }
-
-    return cell;
   }
 
-  // خلية خاصة لحقل المادة مع الاقتراحات - معدلة
   Widget _buildMaterialCell(
       TextEditingController controller,
       FocusNode focusNode,
       int rowIndex,
       int colIndex,
       bool isOwnedByCurrentSeller) {
-    // إضافة مستمع لفقدان التركيز
-    focusNode.addListener(() {
-      if (!focusNode.hasFocus) {
-        _hideAllSuggestionsImmediately();
-      }
-    });
-
-    Widget cell = TableBuilder.buildTableCell(
+    return TableBuilder.buildTableCell(
       controller: controller,
       focusNode: focusNode,
+      enabled: _canEditRow(rowIndex),
       isSerialField: false,
       isNumericField: false,
       rowIndex: rowIndex,
       colIndex: colIndex,
       scrollToField: _scrollToField,
-      onFieldSubmitted: (value, rIndex, cIndex) {
-        _handleFieldSubmitted(value, rIndex, cIndex);
-        // حفظ المادة في الفهرس عند الإنتهاء من الكتابة
-        if (value.trim().isNotEmpty && value.trim().length > 1) {
-          _saveMaterialToIndex(value);
-        }
-      },
+      onFieldSubmitted: (value, rIndex, cIndex) =>
+          _handleFieldSubmitted(value, rIndex, cIndex),
       onFieldChanged: (value, rIndex, cIndex) =>
           _handleFieldChanged(value, rIndex, cIndex),
     );
-
-    // إضافة الاقتراحات
-    Widget cellWithSuggestions = Stack(
-      children: [
-        cell,
-        if (_activeMaterialRowIndex == rowIndex &&
-            _materialSuggestions.isNotEmpty)
-          Positioned(
-            top: 25,
-            left: 0,
-            right: 0,
-            child: _buildHorizontalMaterialSuggestions(rowIndex),
-          ),
-      ],
-    );
-
-    // إذا لم يكن السجل مملوكاً للبائع الحالي، جعل الخلية للقراءة فقط
-    if (!isOwnedByCurrentSeller) {
-      return IgnorePointer(
-        child: Opacity(
-          opacity: 0.7,
-          child: Container(
-            decoration: BoxDecoration(
-              color: Colors.grey[100],
-            ),
-            child: cellWithSuggestions,
-          ),
-        ),
-      );
-    }
-
-    return cellWithSuggestions;
   }
 
-  // خلية خاصة لحقل العبوة مع الاقتراحات
   Widget _buildPackagingCell(
       TextEditingController controller,
       FocusNode focusNode,
       int rowIndex,
       int colIndex,
       bool isOwnedByCurrentSeller) {
-    Widget cell = TableBuilder.buildTableCell(
+    return TableBuilder.buildTableCell(
       controller: controller,
       focusNode: focusNode,
+      enabled: _canEditRow(rowIndex),
       isSerialField: false,
       isNumericField: false,
       rowIndex: rowIndex,
       colIndex: colIndex,
       scrollToField: _scrollToField,
-      onFieldSubmitted: (value, rIndex, cIndex) {
-        _handleFieldSubmitted(value, rIndex, cIndex);
-        // حفظ العبوة في الفهرس عند الإنتهاء من الكتابة
-        if (value.trim().isNotEmpty) {
-          _savePackagingToIndex(value);
-        }
-      },
+      onFieldSubmitted: (value, rIndex, cIndex) =>
+          _handleFieldSubmitted(value, rIndex, cIndex),
       onFieldChanged: (value, rIndex, cIndex) =>
           _handleFieldChanged(value, rIndex, cIndex),
     );
-
-    // إضافة الاقتراحات
-    Widget cellWithSuggestions = Stack(
-      children: [
-        cell,
-        if (_activePackagingRowIndex == rowIndex &&
-            _packagingSuggestions.isNotEmpty)
-          Positioned(
-            top: 25,
-            left: 0,
-            right: 0,
-            child: _buildHorizontalPackagingSuggestions(rowIndex),
-          ),
-      ],
-    );
-
-    // إذا لم يكن السجل مملوكاً للبائع الحالي، جعل الخلية للقراءة فقط
-    if (!isOwnedByCurrentSeller) {
-      return IgnorePointer(
-        child: Opacity(
-          opacity: 0.7,
-          child: Container(
-            decoration: BoxDecoration(
-              color: Colors.grey[100],
-            ),
-            child: cellWithSuggestions,
-          ),
-        ),
-      );
-    }
-
-    return cellWithSuggestions;
   }
 
-  // خلية خاصة لحقل العائدية (الموردين) مع الاقتراحات
   Widget _buildSupplierCell(
       TextEditingController controller,
       FocusNode focusNode,
       int rowIndex,
       int colIndex,
       bool isOwnedByCurrentSeller) {
-    Widget cell = TableBuilder.buildTableCell(
+    return TableBuilder.buildTableCell(
       controller: controller,
       focusNode: focusNode,
+      enabled: _canEditRow(rowIndex),
       isSerialField: false,
       isNumericField: false,
       rowIndex: rowIndex,
       colIndex: colIndex,
       scrollToField: _scrollToField,
-      onFieldSubmitted: (value, rIndex, cIndex) {
-        _handleFieldSubmitted(value, rIndex, cIndex);
-        // حفظ المورد في الفهرس عند الإنتهاء من الكتابة
-        if (value.trim().isNotEmpty) {
-          _saveSupplierToIndex(value);
-        }
-      },
+      onFieldSubmitted: (value, rIndex, cIndex) =>
+          _handleFieldSubmitted(value, rIndex, cIndex),
       onFieldChanged: (value, rIndex, cIndex) =>
           _handleFieldChanged(value, rIndex, cIndex),
-    );
-
-    // إضافة الاقتراحات
-    Widget cellWithSuggestions = Stack(
-      children: [
-        cell,
-        if (_activeSupplierRowIndex == rowIndex &&
-            _supplierSuggestions.isNotEmpty)
-          Positioned(
-            top: 25,
-            left: 0,
-            right: 0,
-            child: _buildHorizontalSupplierSuggestions(rowIndex),
-          ),
-      ],
-    );
-
-    // إذا لم يكن السجل مملوكاً للبائع الحالي، جعل الخلية للقراءة فقط
-    if (!isOwnedByCurrentSeller) {
-      return IgnorePointer(
-        child: Opacity(
-          opacity: 0.7,
-          child: Container(
-            decoration: BoxDecoration(
-              color: Colors.grey[100],
-            ),
-            child: cellWithSuggestions,
-          ),
-        ),
-      );
-    }
-
-    return cellWithSuggestions;
-  }
-
-  // بناء قائمة اقتراحات المادة بشكل أفقي - معدلة لاختيار بنقرة واحدة
-  Widget _buildHorizontalMaterialSuggestions(int rowIndex) {
-    return Container(
-      height: 30, // ارتفاع ثابت لعدم حجب المحتوى
-      decoration: BoxDecoration(
-        color: Colors.white,
-        border: Border.all(color: Colors.grey[300]!),
-        borderRadius: BorderRadius.circular(4),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.1),
-            blurRadius: 4,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: _materialSuggestions.isEmpty
-          ? Container()
-          : ListView.separated(
-              scrollDirection: Axis.horizontal,
-              controller: _materialSuggestionsScrollController,
-              padding: const EdgeInsets.symmetric(horizontal: 4),
-              itemCount: _materialSuggestions.length,
-              separatorBuilder: (context, index) => const SizedBox(width: 4),
-              itemBuilder: (context, index) {
-                return InkWell(
-                  onTap: () {
-                    // اختيار الاقتراح وتنفيذ كل شيء بنقرة واحدة
-                    _selectMaterialSuggestion(
-                        _materialSuggestions[index], rowIndex);
-                  },
-                  child: Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: index == 0
-                          ? Colors.blue[100] // تمييز أول اقتراح
-                          : Colors.blue[50],
-                      borderRadius: BorderRadius.circular(4),
-                      border: Border.all(color: Colors.blue[100]!),
-                    ),
-                    child: Text(
-                      _materialSuggestions[index],
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.blue,
-                        fontWeight:
-                            index == 0 ? FontWeight.bold : FontWeight.normal,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                );
-              },
-            ),
-    );
-  }
-
-// بناء قائمة اقتراحات العبوة بشكل أفقي - معدلة لاختيار بنقرة واحدة
-  Widget _buildHorizontalPackagingSuggestions(int rowIndex) {
-    return Container(
-      height: 30, // ارتفاع ثابت لعدم حجب المحتوى
-      decoration: BoxDecoration(
-        color: Colors.white,
-        border: Border.all(color: Colors.grey[300]!),
-        borderRadius: BorderRadius.circular(4),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.1),
-            blurRadius: 4,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: _packagingSuggestions.isEmpty
-          ? Container()
-          : ListView.separated(
-              scrollDirection: Axis.horizontal,
-              controller: _packagingSuggestionsScrollController,
-              padding: const EdgeInsets.symmetric(horizontal: 4),
-              itemCount: _packagingSuggestions.length,
-              separatorBuilder: (context, index) => const SizedBox(width: 4),
-              itemBuilder: (context, index) {
-                return InkWell(
-                  onTap: () {
-                    // اختيار الاقتراح وتنفيذ كل شيء بنقرة واحدة
-                    _selectPackagingSuggestion(
-                        _packagingSuggestions[index], rowIndex);
-                  },
-                  child: Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: index == 0
-                          ? Colors.green[100] // تمييز أول اقتراح
-                          : Colors.green[50],
-                      borderRadius: BorderRadius.circular(4),
-                      border: Border.all(color: Colors.green[100]!),
-                    ),
-                    child: Text(
-                      _packagingSuggestions[index],
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.green,
-                        fontWeight:
-                            index == 0 ? FontWeight.bold : FontWeight.normal,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                );
-              },
-            ),
-    );
-  }
-
-// بناء قائمة اقتراحات الموردين بشكل أفقي - معدلة لاختيار بنقرة واحدة
-  Widget _buildHorizontalSupplierSuggestions(int rowIndex) {
-    return Container(
-      height: 30, // ارتفاع ثابت لعدم حجب المحتوى
-      decoration: BoxDecoration(
-        color: Colors.white,
-        border: Border.all(color: Colors.grey[300]!),
-        borderRadius: BorderRadius.circular(4),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.1),
-            blurRadius: 4,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: _supplierSuggestions.isEmpty
-          ? Container()
-          : ListView.separated(
-              scrollDirection: Axis.horizontal,
-              controller: _supplierSuggestionsScrollController,
-              padding: const EdgeInsets.symmetric(horizontal: 4),
-              itemCount: _supplierSuggestions.length,
-              separatorBuilder: (context, index) => const SizedBox(width: 4),
-              itemBuilder: (context, index) {
-                return InkWell(
-                  onTap: () {
-                    // اختيار الاقتراح وتنفيذ كل شيء بنقرة واحدة
-                    _selectSupplierSuggestion(
-                        _supplierSuggestions[index], rowIndex);
-                  },
-                  child: Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: index == 0
-                          ? Colors.orange[100] // تمييز أول اقتراح
-                          : Colors.orange[50],
-                      borderRadius: BorderRadius.circular(4),
-                      border: Border.all(color: Colors.orange[100]!),
-                    ),
-                    child: Text(
-                      _supplierSuggestions[index],
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.orange,
-                        fontWeight:
-                            index == 0 ? FontWeight.bold : FontWeight.normal,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                );
-              },
-            ),
     );
   }
 
   void _handleFieldSubmitted(String value, int rowIndex, int colIndex) {
-    // التحقق إذا كان السجل مملوكاً للبائع الحالي
-    if (!_isRowOwnedByCurrentSeller(rowIndex)) {
-      return; // لا تفعل شيئاً إذا لم يكن السجل مملوكاً للبائع الحالي
+    if (!_canEditRow(rowIndex)) return;
+
+    // 1. معالجة حقل المادة
+    if (colIndex == 1) {
+      if (_materialSuggestions.isNotEmpty) {
+        _selectMaterialSuggestion(_materialSuggestions[0], rowIndex);
+        return; // توقف لمنع تخزين النص الناقص
+      }
+      if (value.trim().length > 1) _saveMaterialToIndex(value);
+      FocusScope.of(context).requestFocus(rowFocusNodes[rowIndex][2]);
     }
-
-    // إخفاء الاقتراحات أولاً
-    _hideAllSuggestionsImmediately();
-
-    // إذا كان حقل المادة وEnter ضُغط وكانت هناك اقتراحات
-    if (colIndex == 1 && _materialSuggestions.isNotEmpty) {
-      _selectMaterialSuggestion(_materialSuggestions[0], rowIndex);
-      return;
+    // 2. معالجة حقل العائدية (المورد)
+    else if (colIndex == 2) {
+      if (_supplierSuggestions.isNotEmpty) {
+        _selectSupplierSuggestion(_supplierSuggestions[0], rowIndex);
+        return; // توقف
+      }
+      if (value.trim().length > 1) _saveSupplierToIndex(value);
+      FocusScope.of(context).requestFocus(rowFocusNodes[rowIndex][3]);
     }
-
-    // إذا كان حقل العائدية وEnter ضُغط وكانت هناك اقتراحات
-    if (colIndex == 2 && _supplierSuggestions.isNotEmpty) {
-      _selectSupplierSuggestion(_supplierSuggestions[0], rowIndex);
-      return;
+    // 3. معالجة حقل العبوة
+    else if (colIndex == 4) {
+      if (_packagingSuggestions.isNotEmpty) {
+        _selectPackagingSuggestion(_packagingSuggestions[0], rowIndex);
+        return; // توقف
+      }
+      if (value.trim().length > 1) _savePackagingToIndex(value);
+      FocusScope.of(context).requestFocus(rowFocusNodes[rowIndex][5]);
     }
-
-    // إذا كان حقل العبوة وEnter ضُغط وكانت هناك اقتراحات
-    if (colIndex == 4 && _packagingSuggestions.isNotEmpty) {
-      _selectPackagingSuggestion(_packagingSuggestions[0], rowIndex);
-      return;
-    }
-
-    // التنقل العادي بين الحقول
-    if (colIndex == 0) {
+    // التنقل العادي لبقية الحقول
+    else if (colIndex == 0) {
       FocusScope.of(context).requestFocus(rowFocusNodes[rowIndex][1]);
     } else if (colIndex == 7) {
       _showCashOrDebtDialog(rowIndex);
@@ -1181,11 +909,13 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
       FocusScope.of(context)
           .requestFocus(rowFocusNodes[rowIndex][colIndex + 1]);
     }
+
+    _hideAllSuggestionsImmediately();
   }
 
   void _handleFieldChanged(String value, int rowIndex, int colIndex) {
     // التحقق إذا كان السجل مملوكاً للبائع الحالي
-    if (!_isRowOwnedByCurrentSeller(rowIndex)) {
+    if (!_canEditRow(rowIndex)) {
       return; // لا تفعل شيئاً إذا لم يكن السجل مملوكاً للبائع الحالي
     }
 
@@ -1293,9 +1023,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
 
   void _showCashOrDebtDialog(int rowIndex) {
     // التحقق إذا كان السجل مملوكاً للبائع الحالي
-    if (!_isRowOwnedByCurrentSeller(rowIndex)) {
-      return;
-    }
+    if (!_canEditRow(rowIndex)) return; // منع الظهور تماماً
 
     CommonDialogs.showCashOrDebtDialog(
       context: context,
@@ -1324,10 +1052,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
 
   void _showEmptiesDialog(int rowIndex) {
     // التحقق إذا كان السجل مملوكاً للبائع الحالي
-    if (!_isRowOwnedByCurrentSeller(rowIndex)) {
-      return;
-    }
-
+    if (!_canEditRow(rowIndex)) return; // منع الظهور تماماً
     CommonDialogs.showEmptiesDialog(
       context: context,
       currentValue: emptiesValues[rowIndex],
@@ -1356,31 +1081,49 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
     }
   }
 
-  // التحقق إذا كان السجل مملوكاً للبائع الحالي
-  bool _isRowOwnedByCurrentSeller(int rowIndex) {
-    if (rowIndex >= sellerNames.length) return false;
-    return sellerNames[rowIndex] == widget.sellerName;
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(
-          'يومية مشتريات رقم /$serialNumber/ ليوم $dayName تاريخ ${widget.selectedDate} لمحل ${widget.storeName} البائع ${widget.sellerName}',
-          style: const TextStyle(
-            fontWeight: FontWeight.bold,
-            fontSize: 14,
-          ),
+        title: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            if (_showFullScreenSuggestions &&
+                _getSuggestionsByType().isNotEmpty)
+              SuggestionsBanner(
+                suggestions: _getSuggestionsByType(),
+                type: _currentSuggestionType,
+                currentRowIndex: _getCurrentRowIndexByType(),
+                scrollController: _horizontalSuggestionsController,
+                onSelect: (val, idx) {
+                  if (_currentSuggestionType == 'material')
+                    _selectMaterialSuggestion(val, idx);
+                  if (_currentSuggestionType == 'packaging')
+                    _selectPackagingSuggestion(val, idx);
+                  if (_currentSuggestionType == 'supplier')
+                    _selectSupplierSuggestion(val, idx);
+                },
+                onClose: () =>
+                    _toggleFullScreenSuggestions(type: '', show: false),
+              ),
+            Expanded(
+              child: Text(
+                'يومية مشتريات رقم /$serialNumber/ تاريخ ${widget.selectedDate} البائع ${widget.sellerName}',
+                style:
+                    const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                textAlign: TextAlign.right,
+              ),
+            ),
+          ],
         ),
-        centerTitle: true,
+        centerTitle: false,
         backgroundColor: Colors.red[700],
         foregroundColor: Colors.white,
         actions: [
           IconButton(
-            icon: const Icon(Icons.share),
-            tooltip: 'مشاركة الملف',
-            onPressed: () => _shareFile(),
+            icon: const Icon(Icons.picture_as_pdf),
+            tooltip: 'تصدير PDF',
+            onPressed: () => _generateAndSharePdf(),
           ),
           IconButton(
             icon: _isSaving
@@ -1427,11 +1170,10 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
                   },
           ),
           PopupMenuButton<String>(
-            icon: const Icon(Icons.calendar_today),
+            icon: const Icon(Icons.calendar_month),
             tooltip: 'فتح يومية سابقة',
             onSelected: (selectedDate) async {
               if (selectedDate != widget.selectedDate) {
-                // التحقق من وجود تغييرات غير محفوظة
                 if (_hasUnsavedChanges) {
                   final shouldSave = await _showUnsavedChangesDialog();
                   if (shouldSave) {
@@ -1439,7 +1181,6 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
                   }
                 }
 
-                // الانتقال إلى الشاشة الجديدة بالتاريخ المحدد
                 Navigator.pushReplacement(
                   context,
                   MaterialPageRoute(
@@ -1472,7 +1213,6 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
                   ),
                 );
               } else {
-                // إضافة عنوان
                 items.add(
                   const PopupMenuItem<String>(
                     value: '',
@@ -1513,23 +1253,41 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
           ),
         ],
       ),
-      body: _buildTableWithStickyHeader(),
-      // إضافة الزر العائم هنا
-      floatingActionButton: _buildFloatingActionButton(),
-      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
+      body: _buildMainContent(),
+      // إخفاء زر الإضافة عند ظهور لوحة المفاتيح
+      floatingActionButton: MediaQuery.of(context).viewInsets.bottom > 0
+          ? null
+          : Container(
+              margin: const EdgeInsets.only(bottom: 16, right: 16),
+              child: Material(
+                color: Colors.red[700],
+                borderRadius: BorderRadius.circular(12),
+                elevation: 8,
+                child: InkWell(
+                  onTap: _addNewRow,
+                  borderRadius: BorderRadius.circular(12),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 28, vertical: 16),
+                    child: const Text(
+                      'إضافة',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 18,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+      floatingActionButtonLocation: FloatingActionButtonLocation.startDocked,
+      resizeToAvoidBottomInset: true, // تغيير من false إلى true
     );
   }
 
-// دالة لبناء الزر العائم
-  Widget _buildFloatingActionButton() {
-    return FloatingActionButton(
-      onPressed: _addNewRow,
-      backgroundColor: Colors.red[700],
-      foregroundColor: Colors.white,
-      child: const Icon(Icons.add),
-      tooltip: 'إضافة سجل جديد',
-      heroTag: 'purchases_fab', // مهم لمنع تضارب الـ Hero tags
-    );
+  Widget _buildMainContent() {
+    return _buildTableWithStickyHeader();
   }
 
   Widget _buildTableWithStickyHeader() {
@@ -1575,183 +1333,98 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
 
   Future<void> _saveCurrentRecord({bool silent = false}) async {
     if (_isSaving) return;
-
-    // التحقق من وجود سجلات للحفظ
-    if (rowControllers.isEmpty) {
-      if (!silent && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('لا توجد بيانات للحفظ'),
-            backgroundColor: Colors.orange,
-          ),
-        );
-      }
-      return;
-    }
-
-    // إنشاء قائمة بالمشتريات للبائع الحالي فقط
-    final currentSellerPurchases = <Purchase>[];
-    for (int i = 0; i < rowControllers.length; i++) {
-      final controllers = rowControllers[i];
-
-      // التحقق إذا كان السجل فارغاً
-      if (controllers[1].text.isNotEmpty || controllers[3].text.isNotEmpty) {
-        currentSellerPurchases.add(Purchase(
-          serialNumber: controllers[0].text,
-          material: controllers[1].text,
-          affiliation: controllers[2].text,
-          count: controllers[3].text,
-          packaging: controllers[4].text,
-          standing: controllers[5].text,
-          net: controllers[6].text,
-          price: controllers[7].text,
-          total: controllers[8].text,
-          cashOrDebt: cashOrDebtValues[i],
-          empties: emptiesValues[i],
-          sellerName: sellerNames[i],
-        ));
-      }
-    }
-
-    if (currentSellerPurchases.isEmpty) {
-      if (!silent && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('لا توجد سجلات مضافة للحفظ'),
-            backgroundColor: Colors.orange,
-          ),
-        );
-      }
-      return;
-    }
-
-    // التحقق من قاعدة القائم والصافي
-    bool hasInvalidNetValue = false;
-    for (int i = 0; i < rowControllers.length; i++) {
-      final controllers = rowControllers[i];
-      double standing = double.tryParse(controllers[5].text) ?? 0;
-      double net = double.tryParse(controllers[6].text) ?? 0;
-
-      if (standing < net) {
-        hasInvalidNetValue = true;
-        controllers[6].text = standing.toStringAsFixed(2);
-        _calculateRowValues(i);
-      } else if (standing == 0 && net > 0) {
-        hasInvalidNetValue = true;
-        controllers[6].text = '0.00';
-        _calculateRowValues(i);
-      }
-    }
-
-    // إذا كانت هناك قيم غير صحيحة، نطلب تأكيد
-    if (hasInvalidNetValue && !silent && mounted) {
-      bool confirmed = await _showNetValueWarning();
-      if (!confirmed) {
-        setState(() => _isSaving = false);
-        return;
-      }
-    }
-
-    // إعادة حساب المجاميع بعد التصحيح
-    _calculateAllTotals();
-
+    
     setState(() => _isSaving = true);
 
-    // الحصول على رقم اليومية الحالي أو الجديد
-    String journalNumber = serialNumber;
-    if (journalNumber.isEmpty || journalNumber == '1') {
-      // إذا كان الرقم فارغاً أو 1، نطلب رقم جديد إذا كانت اليومية جديدة
-      final document =
-          await _storageService.loadPurchaseDocument(widget.selectedDate);
-      if (document == null) {
-        // اليومية جديدة - الحصول على الرقم التالي
-        journalNumber = await _storageService.getNextJournalNumber();
-      } else {
-        // اليومية موجودة - استخدام رقمها الحالي
-        journalNumber = document.recordNumber;
-      }
+    // 1. تجميع السجلات الحالية من الواجهة التي تخص البائع الحالي فقط
+    final List<Purchase> currentSellerPurchasesFromUI = [];
+    for (int i = 0; i < rowControllers.length; i++) {
+        // فقط السجلات التي يملكها البائع الحالي هي التي يمكن تعديلها وحفظها
+        if (sellerNames[i] == widget.sellerName) {
+            final controllers = rowControllers[i];
+            if (controllers[1].text.isNotEmpty || controllers[3].text.isNotEmpty) {
+                double s = double.tryParse(controllers[5].text) ?? 0;
+                double n = double.tryParse(controllers[6].text) ?? 0;
+                if (s < n) {
+                    controllers[6].text = s.toStringAsFixed(2);
+                    _calculateRowValues(i);
+                }
+
+                final p = Purchase(
+                    serialNumber: controllers[0].text, // الحفاظ على الرقم التسلسلي المؤقت
+                    material: controllers[1].text,
+                    affiliation: controllers[2].text.trim(),
+                    count: controllers[3].text,
+                    packaging: controllers[4].text,
+                    standing: controllers[5].text,
+                    net: controllers[6].text,
+                    price: controllers[7].text,
+                    total: controllers[8].text,
+                    cashOrDebt: cashOrDebtValues[i],
+                    empties: emptiesValues[i],
+                    sellerName: sellerNames[i],
+                );
+                currentSellerPurchasesFromUI.add(p);
+            }
+        }
+    }
+    
+    // 2. منطق تحديث الأرصدة الجديد (الإلغاء ثم التطبيق)
+    Map<String, double> supplierBalanceChanges = {};
+    final existingDocument = await _storageService.loadPurchaseDocument(widget.selectedDate);
+
+    // الخطوة أ: إلغاء أثر جميع ديون البائع القديمة في هذا اليوم
+    if (existingDocument != null) {
+        for (var oldPurchase in existingDocument.purchases) {
+            if (oldPurchase.sellerName == widget.sellerName && oldPurchase.cashOrDebt == 'دين' && oldPurchase.affiliation.isNotEmpty) {
+                double oldAmount = double.tryParse(oldPurchase.total) ?? 0;
+                supplierBalanceChanges[oldPurchase.affiliation] = (supplierBalanceChanges[oldPurchase.affiliation] ?? 0) - oldAmount;
+            }
+        }
     }
 
-    final document = PurchaseDocument(
-      recordNumber: journalNumber, // <-- استخدام رقم اليومية
+    // الخطوة ب: تطبيق أثر جميع ديون البائع الجديدة من الواجهة
+    for (var newPurchase in currentSellerPurchasesFromUI) {
+        if (newPurchase.cashOrDebt == 'دين' && newPurchase.affiliation.isNotEmpty) {
+            double newAmount = double.tryParse(newPurchase.total) ?? 0;
+            supplierBalanceChanges[newPurchase.affiliation] = (supplierBalanceChanges[newPurchase.affiliation] ?? 0) + newAmount;
+        }
+    }
+
+    // 3. بناء الوثيقة النهائية للحفظ
+    // هذه الوثيقة تحتوي فقط على سجلات البائع الحالي ليتم دمجها في خدمة التخزين
+    final documentToSave = PurchaseDocument(
+      recordNumber: serialNumber,
       date: widget.selectedDate,
-      sellerName: widget.sellerName,
+      sellerName: widget.sellerName, // إرسال اسم البائع الحالي
       storeName: widget.storeName,
       dayName: dayName,
-      purchases: currentSellerPurchases,
-      totals: {
-        'totalCount': totalCountController.text,
-        'totalBase': totalBaseController.text,
-        'totalNet': totalNetController.text,
-        'totalGrand': totalGrandController.text,
-      },
+      purchases: currentSellerPurchasesFromUI, // إرسال سجلات البائع الحالي فقط
+      totals: {}, // سيتم حساب المجاميع النهائية في خدمة التخزين
     );
 
-    final success = await _storageService.savePurchaseDocument(document);
+    // 4. الحفظ في الملف وتحديث الأرصدة
+    // دالة savePurchaseDocument ستقوم بدمج هذه السجلات مع سجلات الباعة الآخرين
+    final success = await _storageService.savePurchaseDocument(documentToSave);
 
     if (success) {
-      setState(() {
-        _hasUnsavedChanges = false;
-        serialNumber = journalNumber; // تحديث الرقم المعروض
-      });
+      // تطبيق التغييرات الصافية على أرصدة الموردين
+      for (var entry in supplierBalanceChanges.entries) {
+          if (entry.value != 0) {
+            await _supplierIndexService.updateSupplierBalance(entry.key, entry.value);
+          }
+      }
+      setState(() => _hasUnsavedChanges = false);
+      await _loadOrCreateJournal(); // تحديث الواجهة والـ sellerNames
     }
 
     setState(() => _isSaving = false);
-
     if (!silent && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text(success ? 'تم الحفظ بنجاح' : 'فشل الحفظ'),
-          backgroundColor: success ? Colors.green : Colors.red,
-        ),
-      );
+          backgroundColor: success ? Colors.green : Colors.red));
     }
   }
-
-  Future<void> _shareFile() async {
-    final filePath = await _storageService.getFilePath(widget.selectedDate);
-
-    if (filePath == null) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('الرجاء حفظ اليومية أولاً'),
-            backgroundColor: Colors.orange,
-          ),
-        );
-      }
-      return;
-    }
-
-    if (mounted) {
-      CommonDialogs.showFilePathDialog(
-        context: context,
-        filePath: filePath,
-      );
-    }
-  }
-
-  Future<bool> _showNetValueWarning() async {
-    return await showDialog<bool>(
-          context: context,
-          barrierDismissible: false,
-          builder: (context) => AlertDialog(
-            title: const Text('تنبيه'),
-            content: const Text(
-              'تم تصحيح بعض القيم في حقل الصافي لأنها كانت أكبر من القائم.\n\nتذكر: يجب أن يكون القائم دائماً أكبر من أو يساوي الصافي.',
-              textAlign: TextAlign.center,
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context, true),
-                child: const Text('موافق'),
-              ),
-            ],
-          ),
-        ) ??
-        false;
-  }
-
   Future<bool> _showUnsavedChangesDialog() async {
     return await showDialog<bool>(
           context: context,
@@ -1819,6 +1492,236 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
         _activeSupplierRowIndex = null;
       });
     }
+  }
+
+  void _toggleFullScreenSuggestions(
+      {required String type, required bool show}) {
+    if (mounted) {
+      setState(() {
+        _showFullScreenSuggestions = show;
+        _currentSuggestionType = show ? type : '';
+      });
+    }
+  }
+
+  List<String> _getSuggestionsByType() {
+    switch (_currentSuggestionType) {
+      case 'material':
+        return _materialSuggestions;
+      case 'packaging':
+        return _packagingSuggestions;
+      case 'supplier':
+        return _supplierSuggestions;
+
+      default:
+        return [];
+    }
+  }
+
+  int _getCurrentRowIndexByType() {
+    switch (_currentSuggestionType) {
+      case 'material':
+        return _activeMaterialRowIndex ?? -1;
+      case 'packaging':
+        return _activePackagingRowIndex ?? -1;
+      case 'supplier':
+        return _activeSupplierRowIndex ?? -1;
+
+      default:
+        return -1;
+    }
+  }
+
+  Future<void> _checkAdminStatus() async {
+    final prefs = await SharedPreferences.getInstance();
+    final adminSeller = prefs.getString('admin_seller');
+    if (mounted) {
+      setState(() {
+        _isAdmin = (widget.sellerName == adminSeller);
+      });
+    }
+  }
+
+// 1. إضافة دالة التحقق من الصلاحية
+  bool _canEditRow(int rowIndex) {
+    if (rowIndex >= sellerNames.length) {
+      return true; // صف جديد لم يحفظ بعد
+    }
+    if (_isAdmin) {
+      return true; // الأدمن يمكنه تعديل أي شيء
+    }
+    // البائع العادي يعدل سجلاته فقط
+    return sellerNames[rowIndex] == widget.sellerName;
+  }
+
+  // --- دالة توليد PDF والمشاركة (PurchasesScreen) ---
+  Future<void> _generateAndSharePdf() async {
+    try {
+      final pdf = pw.Document();
+
+      var arabicFont;
+      try {
+        final fontData =
+            await rootBundle.load("assets/fonts/Cairo-Regular.ttf");
+        arabicFont = pw.Font.ttf(fontData);
+      } catch (e) {
+        arabicFont = pw.Font.courier();
+      }
+
+      final PdfColor headerColor = PdfColor.fromInt(0xFFD32F2F);
+      final PdfColor headerTextColor = PdfColors.white;
+      final PdfColor rowEvenColor = PdfColors.white;
+      final PdfColor rowOddColor = PdfColor.fromInt(0xFFFFCDD2);
+      final PdfColor borderColor = PdfColor.fromInt(0xFFE0E0E0);
+
+      pdf.addPage(
+        pw.MultiPage(
+          pageFormat: PdfPageFormat.a4,
+          orientation: pw.PageOrientation.landscape,
+          textDirection: pw.TextDirection.rtl,
+          theme: pw.ThemeData.withFont(base: arabicFont, bold: arabicFont),
+          build: (pw.Context context) {
+            return [
+              pw.Directionality(
+                textDirection: pw.TextDirection.rtl,
+                child: pw.Column(
+                  children: [
+                    pw.Center(
+                        child: pw.Text('يومية مشتريات رقم /$serialNumber/',
+                            style: pw.TextStyle(
+                                fontSize: 16, fontWeight: pw.FontWeight.bold))),
+                    pw.Center(
+                        child: pw.Text(
+                            'تاريخ ${widget.selectedDate} - البائع ${widget.sellerName}',
+                            style: const pw.TextStyle(
+                                fontSize: 12, color: PdfColors.grey700))),
+                    pw.SizedBox(height: 10),
+                    pw.Table(
+                      border:
+                          pw.TableBorder.all(color: borderColor, width: 0.5),
+                      columnWidths: {
+                        0: const pw.FlexColumnWidth(2),
+                        1: const pw.FlexColumnWidth(2),
+                        2: const pw.FlexColumnWidth(3),
+                        3: const pw.FlexColumnWidth(2),
+                        4: const pw.FlexColumnWidth(2),
+                        5: const pw.FlexColumnWidth(2),
+                        6: const pw.FlexColumnWidth(3),
+                        7: const pw.FlexColumnWidth(2),
+                        8: const pw.FlexColumnWidth(3),
+                        9: const pw.FlexColumnWidth(4),
+                        10: const pw.FlexColumnWidth(1),
+                      },
+                      children: [
+                        pw.TableRow(
+                          decoration: pw.BoxDecoration(color: headerColor),
+                          children: [
+                            _buildPdfHeaderCell('فوارغ', headerTextColor),
+                            _buildPdfHeaderCell('نوع', headerTextColor),
+                            _buildPdfHeaderCell('الإجمالي', headerTextColor),
+                            _buildPdfHeaderCell('السعر', headerTextColor),
+                            _buildPdfHeaderCell('الصافي', headerTextColor),
+                            _buildPdfHeaderCell('القائم', headerTextColor),
+                            _buildPdfHeaderCell('العبوة', headerTextColor),
+                            _buildPdfHeaderCell('العدد', headerTextColor),
+                            _buildPdfHeaderCell('العائدية', headerTextColor),
+                            _buildPdfHeaderCell('المادة', headerTextColor),
+                            _buildPdfHeaderCell('ت', headerTextColor),
+                          ],
+                        ),
+                        ...rowControllers.asMap().entries.map((entry) {
+                          final index = entry.key;
+                          final controllers = entry.value;
+                          if (controllers[1].text.isEmpty &&
+                              controllers[3].text.isEmpty) {
+                            return pw.TableRow(
+                                children: List.filled(11, pw.SizedBox()));
+                          }
+                          final color =
+                              index % 2 == 0 ? rowEvenColor : rowOddColor;
+                          return pw.TableRow(
+                            decoration: pw.BoxDecoration(color: color),
+                            children: [
+                              _buildPdfCell(emptiesValues[index]),
+                              _buildPdfCell(cashOrDebtValues[index]),
+                              _buildPdfCell(controllers[8].text, isBold: true),
+                              _buildPdfCell(controllers[7].text),
+                              _buildPdfCell(controllers[6].text),
+                              _buildPdfCell(controllers[5].text),
+                              _buildPdfCell(controllers[4].text),
+                              _buildPdfCell(controllers[3].text),
+                              _buildPdfCell(controllers[2].text),
+                              _buildPdfCell(controllers[1].text),
+                              _buildPdfCell(controllers[0].text),
+                            ],
+                          );
+                        }).toList(),
+                        pw.TableRow(
+                          decoration: pw.BoxDecoration(
+                              color: PdfColor.fromInt(0xFFEF9A9A)),
+                          children: [
+                            _buildPdfCell(''),
+                            _buildPdfCell(''),
+                            _buildPdfCell(totalGrandController.text,
+                                isBold: true),
+                            _buildPdfCell(''),
+                            _buildPdfCell(totalNetController.text,
+                                isBold: true),
+                            _buildPdfCell(totalBaseController.text,
+                                isBold: true),
+                            _buildPdfCell(''),
+                            _buildPdfCell(totalCountController.text,
+                                isBold: true),
+                            _buildPdfCell(''),
+                            _buildPdfCell(''),
+                            _buildPdfCell('م', isBold: true),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ];
+          },
+        ),
+      );
+
+      final output = await getTemporaryDirectory();
+      // *** إصلاح اسم الملف ***
+      final safeDate = widget.selectedDate.replaceAll('/', '-');
+      final file = File("${output.path}/يومية_مشتريات_$safeDate.pdf");
+
+      await file.writeAsBytes(await pdf.save());
+      await Share.shareXFiles([XFile(file.path)],
+          text: 'يومية مشتريات ${widget.selectedDate}');
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('خطأ: $e'), backgroundColor: Colors.red));
+    }
+  }
+
+  pw.Widget _buildPdfHeaderCell(String text, PdfColor color) {
+    return pw.Container(
+      padding: const pw.EdgeInsets.all(4),
+      alignment: pw.Alignment.center,
+      child: pw.Text(text,
+          textAlign: pw.TextAlign.center,
+          style: pw.TextStyle(
+              color: color, fontSize: 8, fontWeight: pw.FontWeight.bold)),
+    );
+  }
+
+  pw.Widget _buildPdfCell(String text, {bool isBold = false}) {
+    return pw.Container(
+      padding: const pw.EdgeInsets.all(4),
+      alignment: pw.Alignment.center,
+      child: pw.Text(text,
+          textAlign: pw.TextAlign.center,
+          style: pw.TextStyle(
+              fontSize: 8,
+              fontWeight: isBold ? pw.FontWeight.bold : pw.FontWeight.normal)),
+    );
   }
 }
 
