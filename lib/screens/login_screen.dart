@@ -3,6 +3,9 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'date_selection_screen.dart';
 import '../services/store_db_service.dart';
+import '../widgets/exit_button.dart';
+import 'package:flutter/services.dart';
+import 'package:window_manager/window_manager.dart';
 
 enum LoginFlowState { setup, storeName, login }
 
@@ -295,26 +298,18 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
   Future<bool> _onWillPop() async {
     switch (_currentFlowState) {
       case LoginFlowState.login:
-        // من شاشة تسجيل الدخول إلى شاشة إعداد التطبيق مع مسح الحقول
-        setState(() {
-          _currentFlowState = LoginFlowState.setup;
-          _sellerNameController.clear();
-          _passwordController.clear();
-          _errorMessage = null;
-        });
-        break;
+        windowManager.destroy();
+        return false;
       case LoginFlowState.storeName:
-        // من شاشة اسم المحل إلى شاشة الإعداد
         setState(() {
           _currentFlowState = LoginFlowState.setup;
           _storeNameController.clear();
         });
-        break;
+        return false;
       case LoginFlowState.setup:
-        // من شاشة الإعداد إلى الخروج من التطبيق
-        return true;
+        windowManager.destroy();
+        return false;
     }
-    return false;
   }
 
   @override
@@ -332,21 +327,83 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
         break;
     }
 
-    return WillPopScope(
-      onWillPop: _onWillPop,
-      child: Scaffold(
-        body: Container(
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              colors: [Colors.teal[400]!, Colors.teal[700]!],
-              begin: Alignment.centerLeft,
-              end: Alignment.centerRight,
-            ),
-          ),
-          child: Center(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(24.0),
-              child: currentScreen,
+    return CallbackShortcuts(
+      bindings: {
+        const SingleActivator(LogicalKeyboardKey.escape): () {
+          // عند الضغط على Esc
+          switch (_currentFlowState) {
+            case LoginFlowState.login:
+              windowManager.destroy();
+              break;
+            case LoginFlowState.setup:
+              windowManager.destroy();
+              break;
+            case LoginFlowState.storeName:
+              setState(() {
+                _currentFlowState = LoginFlowState.setup;
+                _storeNameController.clear();
+              });
+              break;
+          }
+        },
+      },
+      child: Focus(
+        autofocus: true,
+        child: WillPopScope(
+          onWillPop: _onWillPop,
+          child: Scaffold(
+            body: Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [Colors.teal[400]!, Colors.teal[700]!],
+                  begin: Alignment.centerLeft,
+                  end: Alignment.centerRight,
+                ),
+              ),
+              child: Center(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.all(24.0),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      currentScreen,
+                      // زر الخروج في شاشة تسجيل الدخول
+                      if (_currentFlowState == LoginFlowState.login) ...[
+                        const SizedBox(height: 30),
+                        ExitButton(
+                          onPressed: () {
+                            windowManager.destroy();
+                          },
+                          text: 'خروج',
+                        ),
+                      ],
+                      // زر الخروج في شاشة الإعداد الأولي
+                      if (_currentFlowState == LoginFlowState.setup) ...[
+                        const SizedBox(height: 30),
+                        ExitButton(
+                          onPressed: () {
+                            windowManager.destroy();
+                          },
+                          text: 'خروج',
+                        ),
+                      ],
+                      // زر الرجوع في شاشة اختيار اسم المحل
+                      if (_currentFlowState == LoginFlowState.storeName) ...[
+                        const SizedBox(height: 30),
+                        ExitButton(
+                          onPressed: () {
+                            setState(() {
+                              _currentFlowState = LoginFlowState.setup;
+                              _storeNameController.clear();
+                            });
+                          },
+                          text: 'رجوع',
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
             ),
           ),
         ),
@@ -512,6 +569,7 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
                 icon: Icon(Icons.arrow_drop_down, color: Colors.white),
                 style: TextStyle(color: Colors.teal[700], fontSize: 16),
                 isExpanded: true, // إضافة هذا لتمديد العرض
+                alignment: Alignment.center,
               ),
             ),
             const SizedBox(height: 20),

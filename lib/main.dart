@@ -1,25 +1,71 @@
+// main.dart - الكود المفتوح الأساسي
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+//import 'package:shared_preferences/shared_preferences.dart';
+import 'package:window_manager/window_manager.dart';
 import 'screens/login_screen.dart';
 
 void main() async {
-  // التأكد من تهيئة Flutter
   WidgetsFlutterBinding.ensureInitialized();
 
-  // قفل اتجاه التطبيق
   await SystemChrome.setPreferredOrientations([
     DeviceOrientation.landscapeLeft,
     DeviceOrientation.landscapeRight,
   ]);
 
+  // إعدادات النافذة لنظام Windows
+  await windowManager.ensureInitialized();
+  await windowManager.setTitleBarStyle(TitleBarStyle.hidden);
+  await windowManager.setFullScreen(true);
+  await windowManager.setResizable(false);
+  await windowManager.setMinimizable(false);
+  await windowManager.setMaximizable(false);
+
   runApp(const MyApp());
 }
 
-class MyApp extends StatelessWidget {
+class MyApp extends StatefulWidget {
   const MyApp({super.key});
 
   @override
+  State<MyApp> createState() => _MyAppState();
+}
+
+class _MyAppState extends State<MyApp> {
+  // إعدادات تكبير الخطوط والأيقونات - يمكنك تغيير هذه القيم حسب الرغبة
+  static const double _fontScalePercent = 0.5; // نسبة تكبير الخطوط (0.5 = 150%)
+  static const double _iconScalePercent =
+      0.5; // نسبة تكبير الأيقونات (0.5 = 150%)
+
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSettings();
+  }
+
+  Future<void> _loadSettings() async {
+    // final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      // يمكن تفعيل حفظ الإعدادات في المستقبل إذا أردت جعلها اختيارية
+      // _fontScalePercent = prefs.getDouble('font_scale_percent') ?? 0.5;
+      // _iconScalePercent = prefs.getDouble('icon_scale_percent') ?? 0.5;
+      _isLoading = false;
+    });
+  }
+
+  double get _fontScale => 1.0 + _fontScalePercent;
+  double get _iconScale => 1.0 + _iconScalePercent;
+
+  @override
   Widget build(BuildContext context) {
+    if (_isLoading) {
+      return const MaterialApp(
+        home: Scaffold(body: Center(child: CircularProgressIndicator())),
+      );
+    }
+
     return MaterialApp(
       title: 'Al Hal Market',
       debugShowCheckedModeBanner: false,
@@ -30,43 +76,122 @@ class MyApp extends StatelessWidget {
         ),
         useMaterial3: true,
         fontFamily: 'Arial',
+        textTheme: TextTheme(
+          displayLarge: TextStyle(fontSize: 28 * _fontScale),
+          displayMedium: TextStyle(fontSize: 24 * _fontScale),
+          displaySmall: TextStyle(fontSize: 20 * _fontScale),
+          headlineLarge: TextStyle(fontSize: 24 * _fontScale),
+          headlineMedium: TextStyle(fontSize: 20 * _fontScale),
+          headlineSmall: TextStyle(fontSize: 16 * _fontScale),
+          titleLarge: TextStyle(fontSize: 18 * _fontScale),
+          titleMedium: TextStyle(fontSize: 16 * _fontScale),
+          titleSmall: TextStyle(fontSize: 14 * _fontScale),
+          bodyLarge: TextStyle(fontSize: 14 * _fontScale),
+          bodyMedium: TextStyle(fontSize: 12 * _fontScale),
+          bodySmall: TextStyle(fontSize: 10 * _fontScale),
+          labelLarge: TextStyle(fontSize: 14 * _fontScale),
+          labelMedium: TextStyle(fontSize: 12 * _fontScale),
+          labelSmall: TextStyle(fontSize: 10 * _fontScale),
+        ),
+        iconTheme: IconThemeData(size: 24 * _iconScale),
+        iconButtonTheme: IconButtonThemeData(
+          style: IconButton.styleFrom(iconSize: 24 * _iconScale),
+        ),
+        appBarTheme: AppBarTheme(
+          toolbarHeight: 112.0,
+          titleTextStyle: TextStyle(
+            fontSize: 18 * _fontScale,
+            fontWeight: FontWeight.bold,
+            color: Colors.white,
+          ),
+          iconTheme: IconThemeData(
+            size: 24 * _iconScale,
+            color: Colors.white,
+          ),
+          toolbarTextStyle: TextStyle(
+            fontSize: 14 * _fontScale,
+            color: Colors.white,
+          ),
+        ),
+        elevatedButtonTheme: ElevatedButtonThemeData(
+          style: ElevatedButton.styleFrom(
+            textStyle: TextStyle(fontSize: 14 * _fontScale),
+          ),
+        ),
+        textButtonTheme: TextButtonThemeData(
+          style: TextButton.styleFrom(
+            textStyle: TextStyle(fontSize: 14 * _fontScale),
+          ),
+        ),
+        outlinedButtonTheme: OutlinedButtonThemeData(
+          style: OutlinedButton.styleFrom(
+            textStyle: TextStyle(fontSize: 14 * _fontScale),
+          ),
+        ),
+        inputDecorationTheme: InputDecorationTheme(
+          labelStyle: TextStyle(fontSize: 14 * _fontScale),
+          hintStyle: TextStyle(fontSize: 12 * _fontScale),
+          errorStyle: TextStyle(fontSize: 10 * _fontScale),
+        ),
+        listTileTheme: ListTileThemeData(
+          titleTextStyle: TextStyle(fontSize: 14 * _fontScale),
+          subtitleTextStyle: TextStyle(fontSize: 12 * _fontScale),
+        ),
+        snackBarTheme: SnackBarThemeData(
+          contentTextStyle: TextStyle(fontSize: 12 * _fontScale),
+        ),
       ),
       home: const LoginScreen(),
+      builder: (context, child) {
+        return MediaQuery(
+          data: MediaQuery.of(context).copyWith(
+            textScaler: TextScaler.linear(_fontScale),
+          ),
+          child: child!,
+        );
+      },
     );
   }
 }
+
 /*
+// الكود المعلق الأول - النسخة مع نظام التفعيل
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:window_manager/window_manager.dart';
 import 'screens/login_screen.dart';
-import 'security/activation_screen.dart'; // استيراد شاشة التفعيل
+import 'security/activation_screen.dart';
+import 'screens/settings_screen.dart';
 
 void main() async {
-  // التأكد من تهيئة Flutter
   WidgetsFlutterBinding.ensureInitialized();
 
-  // قفل اتجاه التطبيق
   await SystemChrome.setPreferredOrientations([
     DeviceOrientation.landscapeLeft,
     DeviceOrientation.landscapeRight,
   ]);
 
-  // التحقق من حالة التفعيل
+  // إعدادات النافذة
+  await windowManager.ensureInitialized();
+  await windowManager.setTitleBarStyle(TitleBarStyle.hidden);
+  await windowManager.setFullScreen(true);
+  await windowManager.setResizable(false);
+  await windowManager.setMinimizable(false);
+  await windowManager.setMaximizable(false);
+
   final prefs = await SharedPreferences.getInstance();
   final String activationStatus = prefs.getString('activation_status') ?? '';
 
   bool isActivated = false;
   if (activationStatus.isNotEmpty) {
     try {
-      // فك التشفير البسيط والتحقق من القيمة
       final decodedStatus = utf8.decode(base64.decode(activationStatus));
       if (decodedStatus == 'activated_ok') {
         isActivated = true;
       }
     } catch (e) {
-      // في حال وجود قيمة خاطئة أو قديمة
       isActivated = false;
     }
   }
@@ -74,13 +199,44 @@ void main() async {
   runApp(MyApp(isActivated: isActivated));
 }
 
-class MyApp extends StatelessWidget {
+class MyApp extends StatefulWidget {
   final bool isActivated;
 
   const MyApp({super.key, required this.isActivated});
 
   @override
+  State<MyApp> createState() => _MyAppState();
+}
+
+class _MyAppState extends State<MyApp> {
+  static const double _fontScalePercent = 0.5;
+  static const double _iconScalePercent = 0.5;
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSettings();
+  }
+
+  Future<void> _loadSettings() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      _isLoading = false;
+    });
+  }
+
+  double get _fontScale => 1.0 + _fontScalePercent;
+  double get _iconScale => 1.0 + _iconScalePercent;
+
+  @override
   Widget build(BuildContext context) {
+    if (_isLoading) {
+      return const MaterialApp(
+        home: Scaffold(body: Center(child: CircularProgressIndicator())),
+      );
+    }
+
     return MaterialApp(
       title: 'Al Hal Market',
       debugShowCheckedModeBanner: false,
@@ -91,9 +247,389 @@ class MyApp extends StatelessWidget {
         ),
         useMaterial3: true,
         fontFamily: 'Arial',
+        textTheme: TextTheme(
+          displayLarge: TextStyle(fontSize: 28 * _fontScale),
+          displayMedium: TextStyle(fontSize: 24 * _fontScale),
+          displaySmall: TextStyle(fontSize: 20 * _fontScale),
+          headlineLarge: TextStyle(fontSize: 24 * _fontScale),
+          headlineMedium: TextStyle(fontSize: 20 * _fontScale),
+          headlineSmall: TextStyle(fontSize: 16 * _fontScale),
+          titleLarge: TextStyle(fontSize: 18 * _fontScale),
+          titleMedium: TextStyle(fontSize: 16 * _fontScale),
+          titleSmall: TextStyle(fontSize: 14 * _fontScale),
+          bodyLarge: TextStyle(fontSize: 14 * _fontScale),
+          bodyMedium: TextStyle(fontSize: 12 * _fontScale),
+          bodySmall: TextStyle(fontSize: 10 * _fontScale),
+          labelLarge: TextStyle(fontSize: 14 * _fontScale),
+          labelMedium: TextStyle(fontSize: 12 * _fontScale),
+          labelSmall: TextStyle(fontSize: 10 * _fontScale),
+        ),
+        iconTheme: IconThemeData(size: 24 * _iconScale),
+        iconButtonTheme: IconButtonThemeData(
+          style: IconButton.styleFrom(iconSize: 24 * _iconScale),
+        ),
+        appBarTheme: AppBarTheme(
+          toolbarHeight: 112.0,
+          titleTextStyle: TextStyle(
+            fontSize: 18 * _fontScale,
+            fontWeight: FontWeight.bold,
+            color: Colors.white,
+          ),
+          iconTheme: IconThemeData(
+            size: 24 * _iconScale,
+            color: Colors.white,
+          ),
+          toolbarTextStyle: TextStyle(
+            fontSize: 14 * _fontScale,
+            color: Colors.white,
+          ),
+        ),
+        elevatedButtonTheme: ElevatedButtonThemeData(
+          style: ElevatedButton.styleFrom(
+            textStyle: TextStyle(fontSize: 14 * _fontScale),
+          ),
+        ),
+        textButtonTheme: TextButtonThemeData(
+          style: TextButton.styleFrom(
+            textStyle: TextStyle(fontSize: 14 * _fontScale),
+          ),
+        ),
+        outlinedButtonTheme: OutlinedButtonThemeData(
+          style: OutlinedButton.styleFrom(
+            textStyle: TextStyle(fontSize: 14 * _fontScale),
+          ),
+        ),
+        inputDecorationTheme: InputDecorationTheme(
+          labelStyle: TextStyle(fontSize: 14 * _fontScale),
+          hintStyle: TextStyle(fontSize: 12 * _fontScale),
+          errorStyle: TextStyle(fontSize: 10 * _fontScale),
+        ),
+        listTileTheme: ListTileThemeData(
+          titleTextStyle: TextStyle(fontSize: 14 * _fontScale),
+          subtitleTextStyle: TextStyle(fontSize: 12 * _fontScale),
+        ),
+        snackBarTheme: SnackBarThemeData(
+          contentTextStyle: TextStyle(fontSize: 12 * _fontScale),
+        ),
       ),
-      // تحديد الشاشة الرئيسية بناءً على حالة التفعيل
-      home: isActivated ? const LoginScreen() : const ActivationScreen(),
+      home: widget.isActivated ? const LoginScreen() : const ActivationScreen(),
+      routes: {
+        '/settings': (context) => const SettingsScreen(),
+      },
+      builder: (context, child) {
+        return MediaQuery(
+          data: MediaQuery.of(context).copyWith(
+            textScaler: TextScaler.linear(_fontScale),
+          ),
+          child: child!,
+        );
+      },
+    );
+  }
+}
+*/
+
+/*
+// الكود المعلق الثاني - النسخة مع المؤقت التجريبي
+import 'dart:convert';
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:window_manager/window_manager.dart';
+import 'screens/login_screen.dart';
+import 'screens/settings_screen.dart';
+
+const int TRIAL_DURATION_DAYS = 7;
+
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  await SystemChrome.setPreferredOrientations([
+    DeviceOrientation.landscapeLeft,
+    DeviceOrientation.landscapeRight,
+  ]);
+
+  await windowManager.ensureInitialized();
+  await windowManager.setTitleBarStyle(TitleBarStyle.hidden);
+  await windowManager.setFullScreen(true);
+  await windowManager.setResizable(false);
+  await windowManager.setMinimizable(false);
+  await windowManager.setMaximizable(false);
+
+  final prefs = await SharedPreferences.getInstance();
+  final String? firstLaunchDate = prefs.getString('trial_first_launch_date');
+  final DateTime now = DateTime.now();
+
+  bool isTrialValid = true;
+  int remainingDays = TRIAL_DURATION_DAYS;
+
+  if (firstLaunchDate == null) {
+    await prefs.setString('trial_first_launch_date', now.toIso8601String().split('T')[0]);
+    remainingDays = TRIAL_DURATION_DAYS;
+  } else {
+    final DateTime firstLaunch = DateTime.parse(firstLaunchDate);
+    final int daysPassed = now.difference(firstLaunch).inDays;
+
+    if (daysPassed >= TRIAL_DURATION_DAYS) {
+      isTrialValid = false;
+      remainingDays = 0;
+    } else {
+      remainingDays = TRIAL_DURATION_DAYS - daysPassed;
+    }
+  }
+
+  if (!isTrialValid) {
+    runApp(const TrialExpiredApp());
+  } else {
+    runApp(MyApp(remainingTime: remainingDays));
+  }
+}
+
+class TrialExpiredApp extends StatelessWidget {
+  const TrialExpiredApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      debugShowCheckedModeBanner: false,
+      home: Scaffold(
+        body: Container(
+          width: double.infinity,
+          height: double.infinity,
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [Color(0xFF1A1A1A), Color(0xFF2D2D2D), Color(0xFF1A1A1A)],
+            ),
+          ),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(color: Colors.red, width: 3),
+                  boxShadow: [
+                    BoxShadow(color: Colors.red.withOpacity(0.3), blurRadius: 20, spreadRadius: 5),
+                  ],
+                ),
+                child: const Icon(Icons.gpp_bad, color: Colors.red, size: 80),
+              ),
+              const SizedBox(height: 40),
+              const Text(
+                'انتهت صلاحية النسخة التجريبية',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: Colors.white),
+              ),
+              const SizedBox(height: 30),
+              Container(
+                margin: const EdgeInsets.symmetric(horizontal: 40),
+                padding: const EdgeInsets.all(25),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.05),
+                  borderRadius: BorderRadius.circular(15),
+                  border: Border.all(color: Colors.white.withOpacity(0.1)),
+                ),
+                child: Column(
+                  children: [
+                    const Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.person, color: Colors.teal, size: 24),
+                        SizedBox(width: 10),
+                        Text('للحصول على النسخة الكاملة يرجى التواصل مع', textAlign: TextAlign.center,
+                            style: TextStyle(fontSize: 16, color: Colors.white70)),
+                      ],
+                    ),
+                    const SizedBox(height: 25),
+                    Container(
+                      padding: const EdgeInsets.all(15),
+                      decoration: BoxDecoration(
+                        color: Colors.teal.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: Colors.teal.withOpacity(0.3)),
+                      ),
+                      child: const Column(
+                        children: [
+                          Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                            Icon(Icons.code, color: Colors.teal, size: 20),
+                            SizedBox(width: 8),
+                            Text('المبرمج', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.teal)),
+                          ]),
+                          SizedBox(height: 8),
+                          Text('وائل بلال', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white)),
+                          SizedBox(height: 8),
+                          Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                            Icon(Icons.phone, color: Colors.teal, size: 18),
+                            SizedBox(width: 5),
+                            Text('+963935702074', style: TextStyle(fontSize: 18, color: Colors.white, letterSpacing: 1)),
+                          ]),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 15),
+                    Container(
+                      padding: const EdgeInsets.all(15),
+                      decoration: BoxDecoration(
+                        color: Colors.orange.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: Colors.orange.withOpacity(0.3)),
+                      ),
+                      child: const Column(
+                        children: [
+                          Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                            Icon(Icons.account_balance, color: Colors.orange, size: 20),
+                            SizedBox(width: 8),
+                            Text('المحاسب', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.orange)),
+                          ]),
+                          SizedBox(height: 8),
+                          Text('عدنان الحجي', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white)),
+                          SizedBox(height: 8),
+                          Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                            Icon(Icons.phone, color: Colors.orange, size: 18),
+                            SizedBox(width: 5),
+                            Text('+963944367326', style: TextStyle(fontSize: 18, color: Colors.white, letterSpacing: 1)),
+                          ]),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 40),
+              ElevatedButton(
+                onPressed: () => windowManager.destroy(),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.red,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 50, vertical: 18),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  elevation: 5,
+                ),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.close, size: 22),
+                    SizedBox(width: 10),
+                    Text('إغلاق التطبيق', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class MyApp extends StatefulWidget {
+  final int remainingTime;
+  const MyApp({super.key, required this.remainingTime});
+
+  @override
+  State<MyApp> createState() => _MyAppState();
+}
+
+class _MyAppState extends State<MyApp> {
+  static const double _fontScalePercent = 0.5;
+  static const double _iconScalePercent = 0.5;
+  bool _isLoading = true;
+  bool _hasShownReminder = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSettings();
+  }
+
+  Future<void> _loadSettings() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      _isLoading = false;
+    });
+  }
+
+  double get _fontScale => 1.0 + _fontScalePercent;
+  double get _iconScale => 1.0 + _iconScalePercent;
+
+  @override
+  Widget build(BuildContext context) {
+    if (_isLoading) {
+      return const MaterialApp(
+        home: Scaffold(body: Center(child: CircularProgressIndicator())),
+      );
+    }
+
+    if (!_hasShownReminder && widget.remainingTime <= 3 && widget.remainingTime > 0) {
+      _hasShownReminder = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('⚠️ تنبيه: متبقي ${widget.remainingTime} أيام على انتهاء النسخة التجريبية',
+                  textAlign: TextAlign.center, style: const TextStyle(fontSize: 16)),
+              backgroundColor: Colors.orange,
+              duration: const Duration(seconds: 5),
+            ),
+          );
+        }
+      });
+    }
+
+    return MaterialApp(
+      title: 'Al Hal Market',
+      debugShowCheckedModeBanner: false,
+      theme: ThemeData(
+        colorScheme: ColorScheme.fromSeed(seedColor: Colors.teal, brightness: Brightness.light),
+        useMaterial3: true,
+        fontFamily: 'Arial',
+        textTheme: TextTheme(
+          displayLarge: TextStyle(fontSize: 28 * _fontScale),
+          displayMedium: TextStyle(fontSize: 24 * _fontScale),
+          displaySmall: TextStyle(fontSize: 20 * _fontScale),
+          headlineLarge: TextStyle(fontSize: 24 * _fontScale),
+          headlineMedium: TextStyle(fontSize: 20 * _fontScale),
+          headlineSmall: TextStyle(fontSize: 16 * _fontScale),
+          titleLarge: TextStyle(fontSize: 18 * _fontScale),
+          titleMedium: TextStyle(fontSize: 16 * _fontScale),
+          titleSmall: TextStyle(fontSize: 14 * _fontScale),
+          bodyLarge: TextStyle(fontSize: 14 * _fontScale),
+          bodyMedium: TextStyle(fontSize: 12 * _fontScale),
+          bodySmall: TextStyle(fontSize: 10 * _fontScale),
+          labelLarge: TextStyle(fontSize: 14 * _fontScale),
+          labelMedium: TextStyle(fontSize: 12 * _fontScale),
+          labelSmall: TextStyle(fontSize: 10 * _fontScale),
+        ),
+        iconTheme: IconThemeData(size: 24 * _iconScale),
+        iconButtonTheme: IconButtonThemeData(style: IconButton.styleFrom(iconSize: 24 * _iconScale)),
+        appBarTheme: AppBarTheme(
+          toolbarHeight: 112.0,
+          titleTextStyle: TextStyle(fontSize: 18 * _fontScale, fontWeight: FontWeight.bold, color: Colors.white),
+          iconTheme: IconThemeData(size: 24 * _iconScale, color: Colors.white),
+          toolbarTextStyle: TextStyle(fontSize: 14 * _fontScale, color: Colors.white),
+        ),
+        elevatedButtonTheme: ElevatedButtonThemeData(style: ElevatedButton.styleFrom(textStyle: TextStyle(fontSize: 14 * _fontScale))),
+        textButtonTheme: TextButtonThemeData(style: TextButton.styleFrom(textStyle: TextStyle(fontSize: 14 * _fontScale))),
+        outlinedButtonTheme: OutlinedButtonThemeData(style: OutlinedButton.styleFrom(textStyle: TextStyle(fontSize: 14 * _fontScale))),
+        inputDecorationTheme: InputDecorationTheme(
+          labelStyle: TextStyle(fontSize: 14 * _fontScale),
+          hintStyle: TextStyle(fontSize: 12 * _fontScale),
+          errorStyle: TextStyle(fontSize: 10 * _fontScale),
+        ),
+        listTileTheme: ListTileThemeData(titleTextStyle: TextStyle(fontSize: 14 * _fontScale), subtitleTextStyle: TextStyle(fontSize: 12 * _fontScale)),
+        snackBarTheme: SnackBarThemeData(contentTextStyle: TextStyle(fontSize: 12 * _fontScale)),
+      ),
+      home: const LoginScreen(),
+      routes: {'/settings': (context) => const SettingsScreen()},
+      builder: (context, child) {
+        return MediaQuery(
+          data: MediaQuery.of(context).copyWith(textScaler: TextScaler.linear(_fontScale)),
+          child: child!,
+        );
+      },
     );
   }
 }

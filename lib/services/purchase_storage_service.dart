@@ -375,4 +375,48 @@ class PurchaseStorageService {
       return '1';
     }
   }
+
+  Future<List<String>> getAllAvailableDates() async {
+    try {
+      final basePath = await _getBasePath();
+      final folderPath = '$basePath/PurchaseJournals';
+      final folder = Directory(folderPath);
+      if (!await folder.exists()) return [];
+      final files = await folder.list().toList();
+      final dates = <String>[];
+      for (var f in files) {
+        if (f is File && f.path.endsWith('.json')) {
+          try {
+            final j =
+                jsonDecode(await f.readAsString()) as Map<String, dynamic>;
+            final date = j['date']?.toString() ?? '';
+            if (date.isNotEmpty) dates.add(date);
+          } catch (_) {}
+        }
+      }
+      return dates;
+    } catch (e) {
+      if (kDebugMode) debugPrint('❌ خطأ في جلب تواريخ المشتريات: $e');
+      return [];
+    }
+  }
+
+  Future<PurchaseDocument?> loadDocumentForDate(String date) async {
+    try {
+      final basePath = await _getBasePath();
+      final folderPath = '$basePath/PurchaseJournals';
+      final fileName = _createFileName(date);
+      final filePath = '$folderPath/$fileName';
+
+      final file = File(filePath);
+      if (!await file.exists()) return null;
+
+      final jsonString = await file.readAsString();
+      final jsonMap = jsonDecode(jsonString) as Map<String, dynamic>;
+      return PurchaseDocument.fromJson(jsonMap);
+    } catch (e) {
+      if (kDebugMode) debugPrint('❌ خطأ في قراءة يومية المشتريات: $e');
+      return null;
+    }
+  }
 }

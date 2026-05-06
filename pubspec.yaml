@@ -40,6 +40,11 @@ dependencies:
   device_info_plus: 10.1.2      # الحصول على معلومات الجهاز
   crypto: 3.0.6                 # التشفير وإنشاء البصمات
   
+  file_picker: ^8.0.3   # اختيار ملف الاسترجاع
+
+  window_manager: ^0.4.3
+
+  
 dev_dependencies:
   flutter_test:
     sdk: flutter
