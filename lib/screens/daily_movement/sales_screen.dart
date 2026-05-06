@@ -24,6 +24,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:share_plus/share_plus.dart';
+import '../../widgets/exit_button.dart';
 
 class SalesScreen extends StatefulWidget {
   final String sellerName;
@@ -920,11 +921,11 @@ class _SalesScreenState extends State<SalesScreen> {
               FilteringTextInputFormatter.digitsOnly,
             ]
           : (isNumericField
-                ? [
-                    FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*$')),
-                    FilteringTextInputFormatter.deny(RegExp(r'\.\d{3,}')),
-                  ]
-                : null),
+              ? [
+                  FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*$')),
+                  FilteringTextInputFormatter.deny(RegExp(r'\.\d{3,}')),
+                ]
+              : null),
       fontSize: isSField ? 11 : 13,
       textAlign: isSField ? TextAlign.center : TextAlign.right,
       textDirection: isSField ? TextDirection.ltr : TextDirection.rtl,
@@ -1293,39 +1294,76 @@ class _SalesScreenState extends State<SalesScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
+        automaticallyImplyLeading: false,
+        titleSpacing: 0,
         title: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
+            Row(
+              children: [
+                ExitButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                ),
+                const SizedBox(width: 8),
+                Focus(
+                  focusNode: FocusNode(),
+                  child: SizedBox(
+                    width: 140,
+                    height: 80,
+                    child: ElevatedButton(
+                      onPressed: _addNewRow,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color.fromARGB(255, 14, 82, 184),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 20, vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        elevation: 3,
+                      ),
+                      child: const Text(
+                        'إضافة',
+                        style: TextStyle(
+                            fontSize: 18, fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
             if (_showFullScreenSuggestions &&
                 _getSuggestionsByType().isNotEmpty)
-              SuggestionsBanner(
-                suggestions: _getSuggestionsByType(),
-                type: _currentSuggestionType,
-                currentRowIndex: _getCurrentRowIndexByType(),
-                scrollController: _horizontalSuggestionsController,
-                onSelect: (val, idx) {
-                  if (_currentSuggestionType == 'material')
-                    _selectMaterialSuggestion(val, idx);
-                  if (_currentSuggestionType == 'packaging')
-                    _selectPackagingSuggestion(val, idx);
-                  if (_currentSuggestionType == 'supplier')
-                    _selectSupplierSuggestion(val, idx);
-                  if (_currentSuggestionType == 'customer')
-                    _selectCustomerSuggestion(val, idx);
-                },
-                onClose: () =>
-                    _toggleFullScreenSuggestions(type: '', show: false),
-              ),
-            Expanded(
-              child: Text(
-                'يومية مبيعات رقم /$serialNumber/ تاريخ ${widget.selectedDate} البائع ${widget.sellerName}',
-                style: const TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 14,
+              Expanded(
+                child: SuggestionsBanner(
+                  suggestions: _getSuggestionsByType(),
+                  type: _currentSuggestionType,
+                  currentRowIndex: _getCurrentRowIndexByType(),
+                  scrollController: _horizontalSuggestionsController,
+                  onSelect: (val, idx) {
+                    if (_currentSuggestionType == 'material')
+                      _selectMaterialSuggestion(val, idx);
+                    if (_currentSuggestionType == 'packaging')
+                      _selectPackagingSuggestion(val, idx);
+                    if (_currentSuggestionType == 'supplier')
+                      _selectSupplierSuggestion(val, idx);
+                    if (_currentSuggestionType == 'customer')
+                      _selectCustomerSuggestion(val, idx);
+                  },
+                  onClose: () =>
+                      _toggleFullScreenSuggestions(type: '', show: false),
                 ),
-                textAlign: TextAlign.right,
+              )
+            else
+              Expanded(
+                child: Text(
+                  'يومية مبيعات رقم /$serialNumber/ تاريخ ${widget.selectedDate} البائع ${widget.sellerName}',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                      fontWeight: FontWeight.bold, fontSize: 16, height: 1.5),
+                ),
               ),
-            ),
+            const SizedBox(width: 8),
           ],
         ),
         centerTitle: false,
@@ -1379,7 +1417,7 @@ class _SalesScreenState extends State<SalesScreen> {
                   },
           ),
           PopupMenuButton<String>(
-            icon: const Icon(Icons.calendar_month),
+            icon: const Icon(Icons.calendar_month, size: 60),
             tooltip: 'فتح يومية سابقة',
             onSelected: (selectedDate) async {
               if (selectedDate != widget.selectedDate) {
@@ -1462,37 +1500,29 @@ class _SalesScreenState extends State<SalesScreen> {
           ),
         ],
       ),
-      body: _buildMainContent(),
-      // التعديل هنا: إذا كان ارتفاع لوحة المفاتيح أكبر من 0، نعيد null لإخفاء الزر
-      floatingActionButton: MediaQuery.of(context).viewInsets.bottom > 0
-          ? null
-          : Container(
-              margin: const EdgeInsets.only(bottom: 16, right: 16),
-              child: Material(
-                color: Colors.orange[700],
-                borderRadius: BorderRadius.circular(12),
-                elevation: 8,
-                child: InkWell(
-                  onTap: _addNewRow,
-                  borderRadius: BorderRadius.circular(12),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 28,
-                      vertical: 16,
-                    ),
-                    child: const Text(
-                      'إضافة',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 18,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-      floatingActionButtonLocation: FloatingActionButtonLocation.startDocked,
+      body: RawKeyboardListener(
+        focusNode: FocusNode(),
+        autofocus: true,
+        onKey: (RawKeyEvent event) {
+          if (event is RawKeyDownEvent) {
+            if (event.logicalKey == LogicalKeyboardKey.enter ||
+                event.logicalKey == LogicalKeyboardKey.numpadEnter) {
+              final focusedNode = FocusScope.of(context).focusedChild;
+              if (focusedNode == null) {
+                _addNewRow();
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  if (rowFocusNodes.isNotEmpty) {
+                    final newRowIndex = rowFocusNodes.length - 1;
+                    FocusScope.of(context)
+                        .requestFocus(rowFocusNodes[newRowIndex][1]);
+                  }
+                });
+              }
+            }
+          }
+        },
+        child: _buildMainContent(),
+      ),
       resizeToAvoidBottomInset: true,
     );
   }
@@ -1574,9 +1604,8 @@ class _SalesScreenState extends State<SalesScreen> {
           total: controllers[9].text,
           cashOrDebt: cashOrDebtValues[i],
           empties: emptiesValues[i],
-          customerName: cashOrDebtValues[i] == 'دين'
-              ? customerNames[i].trim()
-              : null,
+          customerName:
+              cashOrDebtValues[i] == 'دين' ? customerNames[i].trim() : null,
           sellerName: sellerNames[i],
         );
 
@@ -2004,9 +2033,8 @@ class _SalesScreenState extends State<SalesScreen> {
                               children: List.filled(12, pw.SizedBox()),
                             );
                           }
-                          final color = index % 2 == 0
-                              ? rowEvenColor
-                              : rowOddColor;
+                          final color =
+                              index % 2 == 0 ? rowEvenColor : rowOddColor;
                           return pw.TableRow(
                             decoration: pw.BoxDecoration(color: color),
                             children: [

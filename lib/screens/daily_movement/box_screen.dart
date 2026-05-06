@@ -16,6 +16,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:share_plus/share_plus.dart';
+import '../../widgets/exit_button.dart';
 
 class BoxScreen extends StatefulWidget {
   final String sellerName;
@@ -1121,44 +1122,134 @@ class _BoxScreenState extends State<BoxScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: AnimatedSwitcher(
-          duration: const Duration(milliseconds: 300),
-          child:
-              _showFullScreenSuggestions && _getSuggestionsByType().isNotEmpty
-                  ? SuggestionsBanner(
-                      suggestions: _getSuggestionsByType(),
-                      type: _currentSuggestionType,
-                      currentRowIndex: _getCurrentRowIndexByType(),
-                      scrollController: _horizontalSuggestionsController,
-                      onSelect: (val, idx) {
-                        if (_currentSuggestionType == 'customer')
-                          _selectCustomerSuggestion(val, idx);
-                        if (_currentSuggestionType == 'supplier')
-                          _selectSupplierSuggestion(val, idx);
-                      },
-                      onClose: () =>
-                          _toggleFullScreenSuggestions(type: '', show: false),
-                    )
-                  : Row(
-                      children: [
-                        // شريط الرصيد على اليسار تماماً مثل شريط الاقتراحات
-                        if (_lastFetchedBalance != null &&
-                            _lastAccountName.isNotEmpty)
-                          Padding(
-                            padding: const EdgeInsets.only(right: 8),
-                            child: _buildAppBarBalanceWidget(),
-                          ),
-                        // الجملة تبقى على اليمين
-                        Expanded(
-                          child: Text(
-                            'يومية صندوق رقم /$serialNumber/ تاريخ ${widget.selectedDate} البائع ${widget.sellerName}',
-                            style: const TextStyle(
-                                fontWeight: FontWeight.bold, fontSize: 13),
-                            textAlign: TextAlign.right,
-                          ),
+        automaticallyImplyLeading: false,
+        titleSpacing: 0,
+        title: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Row(
+              children: [
+                ExitButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                ),
+                const SizedBox(width: 8),
+                Focus(
+                  focusNode: FocusNode(),
+                  child: SizedBox(
+                    width: 140,
+                    height: 80,
+                    child: ElevatedButton(
+                      onPressed: _addNewRow,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color.fromARGB(255, 14, 82, 184),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 20, vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
                         ),
-                      ],
+                        elevation: 3,
+                      ),
+                      child: const Text(
+                        'إضافة',
+                        style: TextStyle(
+                            fontSize: 18, fontWeight: FontWeight.bold),
+                      ),
                     ),
+                  ),
+                ),
+              ],
+            ),
+            if (_showFullScreenSuggestions &&
+                _getSuggestionsByType().isNotEmpty)
+              Expanded(
+                child: SuggestionsBanner(
+                  suggestions: _getSuggestionsByType(),
+                  type: _currentSuggestionType,
+                  currentRowIndex: _getCurrentRowIndexByType(),
+                  scrollController: _horizontalSuggestionsController,
+                  onSelect: (val, idx) {
+                    if (_currentSuggestionType == 'customer')
+                      _selectCustomerSuggestion(val, idx);
+                    if (_currentSuggestionType == 'supplier')
+                      _selectSupplierSuggestion(val, idx);
+                  },
+                  onClose: () =>
+                      _toggleFullScreenSuggestions(type: '', show: false),
+                ),
+              )
+            else
+              Expanded(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Text(
+                      'يومية صندوق رقم /$serialNumber/ تاريخ ${widget.selectedDate} البائع ${widget.sellerName}',
+                      style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                          height: 1.5),
+                      textAlign: TextAlign.center,
+                    ),
+                    // شريط الرصيد المصغر
+                    if (_lastFetchedBalance != null &&
+                        _lastAccountName.isNotEmpty)
+                      Container(
+                        height: 28,
+                        margin: const EdgeInsets.only(top: 2),
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.2),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text(
+                              _lastAccountName.length > 12
+                                  ? '${_lastAccountName.substring(0, 12)}...'
+                                  : _lastAccountName,
+                              style: const TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.white),
+                            ),
+                            const SizedBox(width: 8),
+                            const Text('الرصيد: ',
+                                style: TextStyle(
+                                    fontSize: 10, color: Colors.white70)),
+                            Text(
+                              _lastFetchedBalance?.toStringAsFixed(2) ?? '0.00',
+                              style: const TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.white),
+                            ),
+                            const SizedBox(width: 8),
+                            const Text('الباقي: ',
+                                style: TextStyle(
+                                    fontSize: 10, color: Colors.white70)),
+                            Text(
+                              _calculatedRemaining?.toStringAsFixed(2) ??
+                                  '0.00',
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.bold,
+                                color: (_calculatedRemaining ?? 0) >= 0
+                                    ? Colors.lightGreenAccent
+                                    : Colors.redAccent,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            const SizedBox(width: 8),
+          ],
         ),
         centerTitle: false,
         backgroundColor: Colors.blue[700],
@@ -1214,7 +1305,7 @@ class _BoxScreenState extends State<BoxScreen> {
                   },
           ),
           PopupMenuButton<String>(
-            icon: const Icon(Icons.calendar_month),
+            icon: const Icon(Icons.calendar_month, size: 60),
             tooltip: 'فتح يومية سابقة',
             onSelected: (selectedDate) async {
               if (selectedDate != widget.selectedDate) {
@@ -1297,47 +1388,30 @@ class _BoxScreenState extends State<BoxScreen> {
           ),
         ],
       ),
-      body: _buildMainContent(),
-      floatingActionButton: MediaQuery.of(context).viewInsets.bottom > 0
-          ? null
-          : Container(
-              margin: const EdgeInsets.only(bottom: 16, right: 16),
-              child: Material(
-                color: Colors.blue[700],
-                borderRadius: BorderRadius.circular(12),
-                elevation: 8,
-                child: InkWell(
-                  onTap: _addNewRow,
-                  borderRadius: BorderRadius.circular(12),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 28, vertical: 16),
-                    child: const Text(
-                      'إضافة',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 18,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-      floatingActionButtonLocation: FloatingActionButtonLocation.startDocked,
+      body: RawKeyboardListener(
+        focusNode: FocusNode(),
+        autofocus: true,
+        onKey: (RawKeyEvent event) {
+          if (event is RawKeyDownEvent) {
+            if (event.logicalKey == LogicalKeyboardKey.enter ||
+                event.logicalKey == LogicalKeyboardKey.numpadEnter) {
+              final focusedNode = FocusScope.of(context).focusedChild;
+              if (focusedNode == null) {
+                _addNewRow();
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  if (rowFocusNodes.isNotEmpty) {
+                    final newRowIndex = rowFocusNodes.length - 1;
+                    FocusScope.of(context)
+                        .requestFocus(rowFocusNodes[newRowIndex][1]);
+                  }
+                });
+              }
+            }
+          }
+        },
+        child: _buildMainContent(),
+      ),
       resizeToAvoidBottomInset: true,
-    );
-  }
-
-  Widget _buildMainContent() {
-    // تم إزالة الشريط الأصفر من هنا لأننا نقلناه إلى الـ AppBar
-    return Column(
-      children: [
-        // الجدول الرئيسي
-        Expanded(
-          child: _buildTableWithStickyHeader(),
-        ),
-      ],
     );
   }
 
@@ -1382,7 +1456,7 @@ class _BoxScreenState extends State<BoxScreen> {
     );
   }
 
-   Future<void> _saveCurrentRecord(
+  Future<void> _saveCurrentRecord(
       {bool silent = false, bool reloadAfterSave = true}) async {
     if (_isSaving) return;
 
@@ -1411,12 +1485,14 @@ class _BoxScreenState extends State<BoxScreen> {
     // 2. منطق تحديث الأرصدة الجديد (الإلغاء ثم التطبيق)
     Map<String, double> customerBalanceChanges = {};
     Map<String, double> supplierBalanceChanges = {};
-    final existingDoc = await _storageService.loadBoxDocumentForDate(widget.selectedDate);
+    final existingDoc =
+        await _storageService.loadBoxDocumentForDate(widget.selectedDate);
 
     // الخطوة أ: إلغاء أثر جميع معاملات الصندوق القديمة لهذا البائع
     if (existingDoc != null) {
       for (var oldTrans in existingDoc.transactions) {
-        if (oldTrans.sellerName == widget.sellerName && oldTrans.accountName.isNotEmpty) {
+        if (oldTrans.sellerName == widget.sellerName &&
+            oldTrans.accountName.isNotEmpty) {
           double oldReceived = double.tryParse(oldTrans.received) ?? 0;
           double oldPaid = double.tryParse(oldTrans.paid) ?? 0;
 
@@ -1424,12 +1500,14 @@ class _BoxScreenState extends State<BoxScreen> {
             // معادلة الزبون: الرصيد يتأثر بـ (المدفوع له - المقبوض منه)
             // للإلغاء، نطرح هذا التأثير
             double effect = oldPaid - oldReceived;
-            customerBalanceChanges[oldTrans.accountName] = (customerBalanceChanges[oldTrans.accountName] ?? 0) - effect;
+            customerBalanceChanges[oldTrans.accountName] =
+                (customerBalanceChanges[oldTrans.accountName] ?? 0) - effect;
           } else if (oldTrans.accountType == 'مورد') {
             // معادلة المورد: الرصيد يتأثر بـ (المقبوض منه - المدفوع له)
             // للإلغاء، نطرح هذا التأثير
             double effect = oldReceived - oldPaid;
-            supplierBalanceChanges[oldTrans.accountName] = (supplierBalanceChanges[oldTrans.accountName] ?? 0) - effect;
+            supplierBalanceChanges[oldTrans.accountName] =
+                (supplierBalanceChanges[oldTrans.accountName] ?? 0) - effect;
           }
         }
       }
@@ -1437,23 +1515,28 @@ class _BoxScreenState extends State<BoxScreen> {
 
     // الخطوة ب: تطبيق أثر جميع معاملات الصندوق الجديدة من الواجهة
     for (var newTrans in allTransFromUI) {
-      if (newTrans.sellerName == widget.sellerName && newTrans.accountName.isNotEmpty) {
+      if (newTrans.sellerName == widget.sellerName &&
+          newTrans.accountName.isNotEmpty) {
         double newReceived = double.tryParse(newTrans.received) ?? 0;
         double newPaid = double.tryParse(newTrans.paid) ?? 0;
 
         if (newTrans.accountType == 'زبون') {
           double effect = newPaid - newReceived;
-          customerBalanceChanges[newTrans.accountName] = (customerBalanceChanges[newTrans.accountName] ?? 0) + effect;
+          customerBalanceChanges[newTrans.accountName] =
+              (customerBalanceChanges[newTrans.accountName] ?? 0) + effect;
         } else if (newTrans.accountType == 'مورد') {
           double effect = newReceived - newPaid;
-          supplierBalanceChanges[newTrans.accountName] = (supplierBalanceChanges[newTrans.accountName] ?? 0) + effect;
+          supplierBalanceChanges[newTrans.accountName] =
+              (supplierBalanceChanges[newTrans.accountName] ?? 0) + effect;
         }
       }
     }
 
     // 3. بناء الوثيقة النهائية للحفظ
-    double tReceived = allTransFromUI.fold(0, (sum, t) => sum + (double.tryParse(t.received) ?? 0));
-    double tPaid = allTransFromUI.fold(0, (sum, t) => sum + (double.tryParse(t.paid) ?? 0));
+    double tReceived = allTransFromUI.fold(
+        0, (sum, t) => sum + (double.tryParse(t.received) ?? 0));
+    double tPaid = allTransFromUI.fold(
+        0, (sum, t) => sum + (double.tryParse(t.paid) ?? 0));
 
     final documentToSave = BoxDocument(
       recordNumber: serialNumber,
@@ -1475,15 +1558,17 @@ class _BoxScreenState extends State<BoxScreen> {
       // تطبيق التغييرات الصافية على أرصدة الزبائن والموردين
       for (var entry in customerBalanceChanges.entries) {
         if (entry.value != 0) {
-          await _customerIndexService.updateCustomerBalance(entry.key, entry.value);
+          await _customerIndexService.updateCustomerBalance(
+              entry.key, entry.value);
         }
       }
       for (var entry in supplierBalanceChanges.entries) {
-        if(entry.value != 0) {
-            await _supplierIndexService.updateSupplierBalance(entry.key, entry.value);
+        if (entry.value != 0) {
+          await _supplierIndexService.updateSupplierBalance(
+              entry.key, entry.value);
         }
       }
-      
+
       setState(() => _hasUnsavedChanges = false);
       if (reloadAfterSave) {
         await _loadOrCreateJournal();
@@ -1761,6 +1846,11 @@ class _BoxScreenState extends State<BoxScreen> {
     }
   }
 
+  Widget _buildMainContent() {
+    return _buildTableWithStickyHeader();
+  }
+
+/*
   Widget _buildAppBarBalanceWidget() {
     return Container(
       height: 48,
@@ -1831,7 +1921,7 @@ class _BoxScreenState extends State<BoxScreen> {
       ),
     );
   }
-
+*/
   // --- دالة توليد PDF والمشاركة (BoxScreen) ---
   Future<void> _generateAndSharePdf() async {
     try {
@@ -1839,7 +1929,8 @@ class _BoxScreenState extends State<BoxScreen> {
 
       var arabicFont;
       try {
-        final fontData = await rootBundle.load("assets/fonts/Cairo-Regular.ttf");
+        final fontData =
+            await rootBundle.load("assets/fonts/Cairo-Regular.ttf");
         arabicFont = pw.Font.ttf(fontData);
       } catch (e) {
         arabicFont = pw.Font.courier();
@@ -1873,7 +1964,8 @@ class _BoxScreenState extends State<BoxScreen> {
                                 fontSize: 12, color: PdfColors.grey700))),
                     pw.SizedBox(height: 10),
                     pw.Table(
-                      border: pw.TableBorder.all(color: borderColor, width: 0.5),
+                      border:
+                          pw.TableBorder.all(color: borderColor, width: 0.5),
                       columnWidths: {
                         0: const pw.FlexColumnWidth(2),
                         1: const pw.FlexColumnWidth(4),
@@ -1898,12 +1990,15 @@ class _BoxScreenState extends State<BoxScreen> {
                           if (controllers[1].text.isEmpty &&
                               controllers[2].text.isEmpty &&
                               controllers[3].text.isEmpty) {
-                            return pw.TableRow(children: List.filled(5, pw.SizedBox()));
+                            return pw.TableRow(
+                                children: List.filled(5, pw.SizedBox()));
                           }
-                          final color = index % 2 == 0 ? rowEvenColor : rowOddColor;
+                          final color =
+                              index % 2 == 0 ? rowEvenColor : rowOddColor;
                           String accountInfo = controllers[3].text;
                           if (accountTypeValues[index].isNotEmpty) {
-                            accountInfo = "(${accountTypeValues[index]}) " + accountInfo;
+                            accountInfo =
+                                "(${accountTypeValues[index]}) " + accountInfo;
                           }
                           return pw.TableRow(
                             decoration: pw.BoxDecoration(color: color),
@@ -1917,12 +2012,15 @@ class _BoxScreenState extends State<BoxScreen> {
                           );
                         }).toList(),
                         pw.TableRow(
-                          decoration: pw.BoxDecoration(color: PdfColor.fromInt(0xFF90CAF9)),
+                          decoration: pw.BoxDecoration(
+                              color: PdfColor.fromInt(0xFF90CAF9)),
                           children: [
                             _buildPdfCell(''),
                             _buildPdfCell('المجموع', isBold: true),
-                            _buildPdfCell(totalPaidController.text, isBold: true),
-                            _buildPdfCell(totalReceivedController.text, isBold: true),
+                            _buildPdfCell(totalPaidController.text,
+                                isBold: true),
+                            _buildPdfCell(totalReceivedController.text,
+                                isBold: true),
                             _buildPdfCell(''),
                           ],
                         ),
@@ -1940,17 +2038,20 @@ class _BoxScreenState extends State<BoxScreen> {
       // *** التعديل الهام هنا: استبدال / بـ - لضمان صحة اسم الملف ***
       final safeDate = widget.selectedDate.replaceAll('/', '-');
       final file = File("${output.path}/يومية_صندوق_$safeDate.pdf");
-      
+
       await file.writeAsBytes(await pdf.save());
-      await Share.shareXFiles([XFile(file.path)], text: 'يومية صندوق ${widget.selectedDate}');
-    
+      await Share.shareXFiles([XFile(file.path)],
+          text: 'يومية صندوق ${widget.selectedDate}');
     } catch (e) {
       debugPrint("PDF Error: $e");
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('حدث خطأ أثناء تصدير PDF: $e'), backgroundColor: Colors.red),
+        SnackBar(
+            content: Text('حدث خطأ أثناء تصدير PDF: $e'),
+            backgroundColor: Colors.red),
       );
     }
   }
+
   pw.Widget _buildPdfHeaderCell(String text, PdfColor color) {
     return pw.Container(
       padding: const pw.EdgeInsets.all(4),

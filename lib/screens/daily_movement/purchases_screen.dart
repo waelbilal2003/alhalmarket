@@ -12,6 +12,7 @@ import '../../widgets/table_components.dart' as TableComponents;
 import '../../widgets/common_dialogs.dart' as CommonDialogs;
 import '../../services/enhanced_index_service.dart';
 import '../../widgets/suggestions_banner.dart';
+import '../../widgets/exit_button.dart';
 import '../../services/supplier_balance_tracker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -20,6 +21,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:share_plus/share_plus.dart';
+import 'package:flutter/services.dart';
 
 class PurchasesScreen extends StatefulWidget {
   final String sellerName;
@@ -1085,35 +1087,74 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
+        automaticallyImplyLeading: false,
+        titleSpacing: 0,
         title: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
+            Row(
+              children: [
+                ExitButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                ),
+                const SizedBox(width: 8),
+                Focus(
+                  focusNode: FocusNode(),
+                  child: SizedBox(
+                    width: 140,
+                    height: 80,
+                    child: ElevatedButton(
+                      onPressed: _addNewRow,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color.fromARGB(255, 14, 82, 184),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 20, vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        elevation: 3,
+                      ),
+                      child: const Text(
+                        'إضافة',
+                        style: TextStyle(
+                            fontSize: 18, fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
             if (_showFullScreenSuggestions &&
                 _getSuggestionsByType().isNotEmpty)
-              SuggestionsBanner(
-                suggestions: _getSuggestionsByType(),
-                type: _currentSuggestionType,
-                currentRowIndex: _getCurrentRowIndexByType(),
-                scrollController: _horizontalSuggestionsController,
-                onSelect: (val, idx) {
-                  if (_currentSuggestionType == 'material')
-                    _selectMaterialSuggestion(val, idx);
-                  if (_currentSuggestionType == 'packaging')
-                    _selectPackagingSuggestion(val, idx);
-                  if (_currentSuggestionType == 'supplier')
-                    _selectSupplierSuggestion(val, idx);
-                },
-                onClose: () =>
-                    _toggleFullScreenSuggestions(type: '', show: false),
+              Expanded(
+                child: SuggestionsBanner(
+                  suggestions: _getSuggestionsByType(),
+                  type: _currentSuggestionType,
+                  currentRowIndex: _getCurrentRowIndexByType(),
+                  scrollController: _horizontalSuggestionsController,
+                  onSelect: (val, idx) {
+                    if (_currentSuggestionType == 'material')
+                      _selectMaterialSuggestion(val, idx);
+                    if (_currentSuggestionType == 'packaging')
+                      _selectPackagingSuggestion(val, idx);
+                    if (_currentSuggestionType == 'supplier')
+                      _selectSupplierSuggestion(val, idx);
+                  },
+                  onClose: () =>
+                      _toggleFullScreenSuggestions(type: '', show: false),
+                ),
+              )
+            else
+              Expanded(
+                child: Text(
+                  'يومية مشتريات رقم /$serialNumber/ تاريخ ${widget.selectedDate} البائع ${widget.sellerName}',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                      fontWeight: FontWeight.bold, fontSize: 16, height: 1.5),
+                ),
               ),
-            Expanded(
-              child: Text(
-                'يومية مشتريات رقم /$serialNumber/ تاريخ ${widget.selectedDate} البائع ${widget.sellerName}',
-                style:
-                    const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-                textAlign: TextAlign.right,
-              ),
-            ),
+            const SizedBox(width: 8),
           ],
         ),
         centerTitle: false,
@@ -1170,7 +1211,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
                   },
           ),
           PopupMenuButton<String>(
-            icon: const Icon(Icons.calendar_month),
+            icon: const Icon(Icons.calendar_month, size: 60),
             tooltip: 'فتح يومية سابقة',
             onSelected: (selectedDate) async {
               if (selectedDate != widget.selectedDate) {
@@ -1253,36 +1294,23 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
           ),
         ],
       ),
-      body: _buildMainContent(),
-      // إخفاء زر الإضافة عند ظهور لوحة المفاتيح
-      floatingActionButton: MediaQuery.of(context).viewInsets.bottom > 0
-          ? null
-          : Container(
-              margin: const EdgeInsets.only(bottom: 16, right: 16),
-              child: Material(
-                color: Colors.red[700],
-                borderRadius: BorderRadius.circular(12),
-                elevation: 8,
-                child: InkWell(
-                  onTap: _addNewRow,
-                  borderRadius: BorderRadius.circular(12),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 28, vertical: 16),
-                    child: const Text(
-                      'إضافة',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 18,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-      floatingActionButtonLocation: FloatingActionButtonLocation.startDocked,
-      resizeToAvoidBottomInset: true, // تغيير من false إلى true
+      body: RawKeyboardListener(
+        focusNode: FocusNode(),
+        autofocus: true,
+        onKey: (RawKeyEvent event) {
+          if (event is RawKeyDownEvent) {
+            if (event.logicalKey == LogicalKeyboardKey.enter ||
+                event.logicalKey == LogicalKeyboardKey.numpadEnter) {
+              final focusedNode = FocusScope.of(context).focusedChild;
+              if (focusedNode == null) {
+                _addNewRow();
+              }
+            }
+          }
+        },
+        child: _buildMainContent(),
+      ),
+      resizeToAvoidBottomInset: true,
     );
   }
 
@@ -1333,62 +1361,70 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
 
   Future<void> _saveCurrentRecord({bool silent = false}) async {
     if (_isSaving) return;
-    
+
     setState(() => _isSaving = true);
 
     // 1. تجميع السجلات الحالية من الواجهة التي تخص البائع الحالي فقط
     final List<Purchase> currentSellerPurchasesFromUI = [];
     for (int i = 0; i < rowControllers.length; i++) {
-        // فقط السجلات التي يملكها البائع الحالي هي التي يمكن تعديلها وحفظها
-        if (sellerNames[i] == widget.sellerName) {
-            final controllers = rowControllers[i];
-            if (controllers[1].text.isNotEmpty || controllers[3].text.isNotEmpty) {
-                double s = double.tryParse(controllers[5].text) ?? 0;
-                double n = double.tryParse(controllers[6].text) ?? 0;
-                if (s < n) {
-                    controllers[6].text = s.toStringAsFixed(2);
-                    _calculateRowValues(i);
-                }
+      // فقط السجلات التي يملكها البائع الحالي هي التي يمكن تعديلها وحفظها
+      if (sellerNames[i] == widget.sellerName) {
+        final controllers = rowControllers[i];
+        if (controllers[1].text.isNotEmpty || controllers[3].text.isNotEmpty) {
+          double s = double.tryParse(controllers[5].text) ?? 0;
+          double n = double.tryParse(controllers[6].text) ?? 0;
+          if (s < n) {
+            controllers[6].text = s.toStringAsFixed(2);
+            _calculateRowValues(i);
+          }
 
-                final p = Purchase(
-                    serialNumber: controllers[0].text, // الحفاظ على الرقم التسلسلي المؤقت
-                    material: controllers[1].text,
-                    affiliation: controllers[2].text.trim(),
-                    count: controllers[3].text,
-                    packaging: controllers[4].text,
-                    standing: controllers[5].text,
-                    net: controllers[6].text,
-                    price: controllers[7].text,
-                    total: controllers[8].text,
-                    cashOrDebt: cashOrDebtValues[i],
-                    empties: emptiesValues[i],
-                    sellerName: sellerNames[i],
-                );
-                currentSellerPurchasesFromUI.add(p);
-            }
+          final p = Purchase(
+            serialNumber:
+                controllers[0].text, // الحفاظ على الرقم التسلسلي المؤقت
+            material: controllers[1].text,
+            affiliation: controllers[2].text.trim(),
+            count: controllers[3].text,
+            packaging: controllers[4].text,
+            standing: controllers[5].text,
+            net: controllers[6].text,
+            price: controllers[7].text,
+            total: controllers[8].text,
+            cashOrDebt: cashOrDebtValues[i],
+            empties: emptiesValues[i],
+            sellerName: sellerNames[i],
+          );
+          currentSellerPurchasesFromUI.add(p);
         }
+      }
     }
-    
+
     // 2. منطق تحديث الأرصدة الجديد (الإلغاء ثم التطبيق)
     Map<String, double> supplierBalanceChanges = {};
-    final existingDocument = await _storageService.loadPurchaseDocument(widget.selectedDate);
+    final existingDocument =
+        await _storageService.loadPurchaseDocument(widget.selectedDate);
 
     // الخطوة أ: إلغاء أثر جميع ديون البائع القديمة في هذا اليوم
     if (existingDocument != null) {
-        for (var oldPurchase in existingDocument.purchases) {
-            if (oldPurchase.sellerName == widget.sellerName && oldPurchase.cashOrDebt == 'دين' && oldPurchase.affiliation.isNotEmpty) {
-                double oldAmount = double.tryParse(oldPurchase.total) ?? 0;
-                supplierBalanceChanges[oldPurchase.affiliation] = (supplierBalanceChanges[oldPurchase.affiliation] ?? 0) - oldAmount;
-            }
+      for (var oldPurchase in existingDocument.purchases) {
+        if (oldPurchase.sellerName == widget.sellerName &&
+            oldPurchase.cashOrDebt == 'دين' &&
+            oldPurchase.affiliation.isNotEmpty) {
+          double oldAmount = double.tryParse(oldPurchase.total) ?? 0;
+          supplierBalanceChanges[oldPurchase.affiliation] =
+              (supplierBalanceChanges[oldPurchase.affiliation] ?? 0) -
+                  oldAmount;
         }
+      }
     }
 
     // الخطوة ب: تطبيق أثر جميع ديون البائع الجديدة من الواجهة
     for (var newPurchase in currentSellerPurchasesFromUI) {
-        if (newPurchase.cashOrDebt == 'دين' && newPurchase.affiliation.isNotEmpty) {
-            double newAmount = double.tryParse(newPurchase.total) ?? 0;
-            supplierBalanceChanges[newPurchase.affiliation] = (supplierBalanceChanges[newPurchase.affiliation] ?? 0) + newAmount;
-        }
+      if (newPurchase.cashOrDebt == 'دين' &&
+          newPurchase.affiliation.isNotEmpty) {
+        double newAmount = double.tryParse(newPurchase.total) ?? 0;
+        supplierBalanceChanges[newPurchase.affiliation] =
+            (supplierBalanceChanges[newPurchase.affiliation] ?? 0) + newAmount;
+      }
     }
 
     // 3. بناء الوثيقة النهائية للحفظ
@@ -1410,9 +1446,10 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
     if (success) {
       // تطبيق التغييرات الصافية على أرصدة الموردين
       for (var entry in supplierBalanceChanges.entries) {
-          if (entry.value != 0) {
-            await _supplierIndexService.updateSupplierBalance(entry.key, entry.value);
-          }
+        if (entry.value != 0) {
+          await _supplierIndexService.updateSupplierBalance(
+              entry.key, entry.value);
+        }
       }
       setState(() => _hasUnsavedChanges = false);
       await _loadOrCreateJournal(); // تحديث الواجهة والـ sellerNames
@@ -1425,6 +1462,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
           backgroundColor: success ? Colors.green : Colors.red));
     }
   }
+
   Future<bool> _showUnsavedChangesDialog() async {
     return await showDialog<bool>(
           context: context,
