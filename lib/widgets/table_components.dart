@@ -202,54 +202,82 @@ Widget buildEmptiesCell({
         onTap();
         scrollToField(rowIndex, colIndex);
       },
-      child: Container(
-        width: double.infinity,
-        height: double.infinity,
-        decoration: BoxDecoration(
-          border: Border.all(
-            color: _getEmptiesColor(value),
-            width: 2,
-          ),
-          borderRadius: BorderRadius.circular(4),
-          color: _getEmptiesColor(value).withOpacity(0.05),
-        ),
-        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
-        child: Center(
-          child: value.isEmpty
-              ? Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Text(
-                      'اختر',
-                      style: TextStyle(fontSize: 16, color: Colors.grey),
-                      textAlign: TextAlign.center,
-                    ),
-                    Icon(
-                      Icons.arrow_drop_down,
-                      size: 20,
-                      color: Colors.grey[600],
-                    ),
-                  ],
-                )
-              : Text(
-                  value,
-                  style: TextStyle(
-                    fontSize: 16,
-                    color: _getEmptiesColor(value),
-                    fontWeight: FontWeight.bold,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-        ),
-      ),
+      child: _buildEmptiesDisplay(value),
     ),
   );
 }
 
-// دالة مساعدة للحصول على لون خلية الفوارغ
-Color _getEmptiesColor(String value) {
-  if (value.isNotEmpty) {
-    return const Color.fromARGB(255, 14, 82, 184); // أزرق
+// دالة مساعدة لعرض قيمة الفوارغ بنفس تنسيق نقدي/دين
+Widget _buildEmptiesDisplay(String value) {
+  switch (value) {
+    case 'مع فوارغ':
+      return Container(
+        decoration: BoxDecoration(
+          border: Border.all(
+            color: const Color.fromARGB(255, 14, 82, 184),
+            width: 0.5,
+          ),
+          borderRadius: BorderRadius.circular(2),
+          color: const Color.fromARGB(255, 14, 82, 184).withOpacity(0.05),
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
+        child: const Center(
+          child: Text(
+            'مع فوارغ',
+            style: TextStyle(
+              fontSize: 16,
+              color: Color.fromARGB(255, 14, 82, 184),
+              fontWeight: FontWeight.bold,
+            ),
+            textAlign: TextAlign.center,
+          ),
+        ),
+      );
+    case 'بدون فوارغ':
+      return Container(
+        decoration: BoxDecoration(
+          border: Border.all(
+            color: const Color.fromARGB(255, 14, 82, 184),
+            width: 0.5,
+          ),
+          borderRadius: BorderRadius.circular(2),
+          color: const Color.fromARGB(255, 14, 82, 184).withOpacity(0.05),
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
+        child: const Center(
+          child: Text(
+            'بدون فوارغ',
+            style: TextStyle(
+              fontSize: 16,
+              color: Color.fromARGB(255, 14, 82, 184),
+              fontWeight: FontWeight.bold,
+            ),
+            textAlign: TextAlign.center,
+          ),
+        ),
+      );
+    default: // فارغ - اختيار
+      return Container(
+        decoration: BoxDecoration(
+          border: Border.all(color: Colors.grey[300]!),
+          borderRadius: BorderRadius.circular(2),
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Text(
+              'اختر',
+              style: TextStyle(fontSize: 16, color: Colors.grey),
+              textAlign: TextAlign.center,
+            ),
+            Icon(
+              Icons.arrow_drop_down,
+              size: 20,
+              color: Colors.grey[600],
+            ),
+          ],
+        ),
+      );
   }
-  return Colors.grey;
 }

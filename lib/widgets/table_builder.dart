@@ -140,58 +140,74 @@ Widget buildCashOrDebtCell({
         onTap();
         scrollToField(rowIndex, colIndex);
       },
-      child: Container(
-        width: double.infinity,
-        height: double.infinity,
-        decoration: BoxDecoration(
-          border: Border.all(
-            color: _getCashOrDebtColor(cashOrDebtValue),
-            width: 2,
-          ),
-          borderRadius: BorderRadius.circular(4),
-          color: _getCashOrDebtColor(cashOrDebtValue).withOpacity(0.05),
-        ),
-        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
-        child: Center(
-          child: cashOrDebtValue.isEmpty
-              ? Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Text(
-                      'اختر',
-                      style: TextStyle(fontSize: 16, color: Colors.grey),
-                      textAlign: TextAlign.center,
-                    ),
-                    Icon(
-                      Icons.arrow_drop_down,
-                      size: 20,
-                      color: Colors.grey[600],
-                    ),
-                  ],
-                )
-              : Text(
-                  cashOrDebtValue,
-                  style: TextStyle(
-                    fontSize: 16,
-                    color: _getCashOrDebtColor(cashOrDebtValue),
-                    fontWeight: FontWeight.bold,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-        ),
-      ),
+      child: _buildCashOrDebtDisplay(cashOrDebtValue, isSalesScreen),
     ),
   );
 }
 
-// دالة مساعدة للحصول على لون خلية نقدي/دين
-Color _getCashOrDebtColor(String value) {
-  switch (value) {
-    case 'نقدي':
-      return Colors.green;
+// دالة مساعدة لتقليل التكرار في بناء واجهة خلية نقدي/دين
+Widget _buildCashOrDebtDisplay(String cashOrDebtValue, bool isSalesScreen) {
+  switch (cashOrDebtValue) {
     case 'دين':
-      return Colors.red;
-    default:
-      return Colors.grey;
+      return Container(
+        decoration: BoxDecoration(
+          border: Border.all(color: Colors.red, width: 0.5),
+          borderRadius: BorderRadius.circular(2),
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
+        child: const Center(
+          child: Text(
+            'دين',
+            style: TextStyle(
+              fontSize: 16,
+              color: Colors.red,
+              fontWeight: FontWeight.bold,
+            ),
+            textAlign: TextAlign.center,
+          ),
+        ),
+      );
+    case 'نقدي':
+      return Container(
+        decoration: BoxDecoration(
+          border: Border.all(color: Colors.green, width: 0.5),
+          borderRadius: BorderRadius.circular(2),
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
+        child: const Center(
+          child: Text(
+            'نقدي',
+            style: TextStyle(
+              fontSize: 16,
+              color: Colors.green,
+              fontWeight: FontWeight.bold,
+            ),
+            textAlign: TextAlign.center,
+          ),
+        ),
+      );
+    default: // فارغ
+      return Container(
+        decoration: BoxDecoration(
+          border: Border.all(color: Colors.grey[300]!),
+          borderRadius: BorderRadius.circular(2),
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Text(
+              'اختر',
+              style: TextStyle(fontSize: 16, color: Colors.grey),
+              textAlign: TextAlign.center,
+            ),
+            Icon(
+              Icons.arrow_drop_down,
+              size: 20,
+              color: Colors.grey[600],
+            ),
+          ],
+        ),
+      );
   }
 }

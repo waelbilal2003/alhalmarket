@@ -1425,7 +1425,8 @@ class _SalesScreenState extends State<SalesScreen> {
                   'يومية مبيعات رقم /$serialNumber/ تاريخ ${widget.selectedDate} البائع ${widget.sellerName}',
                   textAlign: TextAlign.center,
                   style: const TextStyle(
-                      fontWeight: FontWeight.bold, fontSize: 16, height: 1.5),
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
               ),
             const SizedBox(width: 8),

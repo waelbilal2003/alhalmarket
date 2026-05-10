@@ -89,12 +89,12 @@ BEGIN
     BEGIN
         BLOCK "040904e4"
         BEGIN
-            VALUE "CompanyName", "sy.alhalmarket" "\0"
+            VALUE "CompanyName", "com.marketledger" "\0"
             VALUE "FileDescription", "alhalmarket" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
             VALUE "InternalName", "alhalmarket" "\0"
-            VALUE "LegalCopyright", "Copyright (C) 2025 com.example. All rights reserved." "\0"
-            VALUE "alhalmarketFilename", "سوق الهال.exe" "\0"
+            VALUE "LegalCopyright", "Copyright (C) 2026 com.marketledger. All rights reserved." "\0"
+            VALUE "OriginalFilename", "alhalmarket.exe" "\0"
             VALUE "ProductName", "alhalmarket" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
