@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../services/supplier_index_service.dart';
 import 'supplier_invoices_screen.dart';
 import 'supplier_purchases_screen.dart';
+import '../../widgets/exit_button.dart';
 
 class SupplierSelectionScreen extends StatefulWidget {
   final String selectedDate;
@@ -63,8 +64,23 @@ class _SupplierSelectionScreenState extends State<SupplierSelectionScreen> {
       textDirection: TextDirection.rtl,
       child: Scaffold(
         appBar: AppBar(
-          title: const Text('اختر مورداً لعرض التفاصيل'),
-          centerTitle: false,
+          automaticallyImplyLeading: false,
+          titleSpacing: 0,
+          toolbarHeight: kToolbarHeight + 20,
+          title: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const SizedBox(width: 140),
+              const Text(
+                'اختر مورداً لعرض التفاصيل',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+              ),
+              ExitButton(
+                onPressed: () => Navigator.of(context).pop(),
+              ),
+            ],
+          ),
+          centerTitle: true,
           backgroundColor: widget.reportType == 'purchases'
               ? Colors.red[700]
               : Colors.teal[700],
@@ -114,7 +130,8 @@ class _SupplierSelectionScreenState extends State<SupplierSelectionScreen> {
                       final supplierName = _filteredSuppliers[index];
                       return ListTile(
                         title: Text(supplierName,
-                            style: const TextStyle(fontSize: 18)),
+                            style: const TextStyle(
+                                fontSize: 18, color: Colors.black)),
                         leading: Icon(
                           Icons.local_shipping,
                           color: widget.reportType == 'purchases'

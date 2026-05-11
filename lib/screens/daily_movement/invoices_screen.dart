@@ -7,6 +7,7 @@ import '../../services/invoices_service.dart';
 import '../../services/customer_index_service.dart';
 import '../../widgets/pdf_action_menu.dart';
 import 'package:flutter/services.dart';
+import '../../widgets/exit_button.dart';
 
 class InvoicesScreen extends StatefulWidget {
   final String selectedDate;
@@ -283,6 +284,15 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
         title: Text(
           'فاتورة الزبون ${widget.customerName}',
           style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+        ),
+        leadingWidth: 100,
+        leading: ExitButton(
+          onPressed: () {
+            Navigator.of(context).pop();
+          },
+          width: 80,
+          height: 40,
+          text: 'خروج',
         ),
         actions: [
           PdfActionMenu(

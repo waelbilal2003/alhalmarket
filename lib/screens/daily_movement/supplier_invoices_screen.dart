@@ -6,6 +6,7 @@ import '../../services/invoices_service.dart';
 import '../../services/supplier_index_service.dart';
 import '../../widgets/pdf_action_menu.dart';
 import 'package:flutter/services.dart';
+import '../../widgets/exit_button.dart';
 
 class SupplierInvoicesScreen extends StatefulWidget {
   final String selectedDate;
@@ -476,6 +477,15 @@ class _SupplierInvoicesScreenState extends State<SupplierInvoicesScreen> {
           'مبيعات المورد ${widget.supplierName}',
           style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
         ),
+        leadingWidth: 100,
+        leading: ExitButton(
+          onPressed: () {
+            Navigator.of(context).pop();
+          },
+          width: 80,
+          height: 40,
+          text: 'خروج',
+        ),
         actions: [
           PdfActionMenu(
             type: 'supplier',
@@ -487,7 +497,7 @@ class _SupplierInvoicesScreenState extends State<SupplierInvoicesScreen> {
             iconSize: 60,
             getItems: () async {
               final data = await _reportDataFuture;
-              return [data]; // نمرر كائن التقرير كاملاً
+              return [data];
             },
             generatePdfCallback: (items) async {
               final data = items[0] as SupplierReportData;

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'customer_selection_screen.dart';
 import 'supplier_selection_screen.dart';
+import '../../widgets/exit_button.dart';
 
 class InvoiceTypeSelectionScreen extends StatelessWidget {
   final String selectedDate;
@@ -20,6 +21,15 @@ class InvoiceTypeSelectionScreen extends StatelessWidget {
         centerTitle: true,
         backgroundColor: Colors.blueGrey[800],
         foregroundColor: Colors.white,
+        leadingWidth: 100,
+        leading: ExitButton(
+          onPressed: () {
+            Navigator.of(context).pop();
+          },
+          width: 80,
+          height: 40,
+          text: 'خروج',
+        ),
       ),
       body: Padding(
         padding: const EdgeInsets.all(8.0),

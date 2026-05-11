@@ -6,6 +6,7 @@ import '../../models/purchase_model.dart';
 import '../../services/invoices_service.dart';
 import '../../widgets/pdf_action_menu.dart';
 import 'package:flutter/services.dart';
+import '../../widgets/exit_button.dart';
 
 class SupplierPurchasesScreen extends StatefulWidget {
   final String selectedDate;
@@ -254,6 +255,15 @@ class _SupplierPurchasesScreenState extends State<SupplierPurchasesScreen> {
         title: Text(
           'مشتريات من المورد ${widget.supplierName}',
           style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+        ),
+        leadingWidth: 100,
+        leading: ExitButton(
+          onPressed: () {
+            Navigator.of(context).pop();
+          },
+          width: 80,
+          height: 40,
+          text: 'خروج',
         ),
         actions: [
           PdfActionMenu(

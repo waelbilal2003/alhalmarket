@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../services/customer_index_service.dart';
 import 'invoices_screen.dart';
+import '../../widgets/exit_button.dart';
 
 class CustomerSelectionScreen extends StatefulWidget {
   final String selectedDate;
@@ -60,8 +61,23 @@ class _CustomerSelectionScreenState extends State<CustomerSelectionScreen> {
       textDirection: TextDirection.rtl,
       child: Scaffold(
         appBar: AppBar(
-          title: const Text('اختر زبوناً لعرض الفاتورة'),
-          centerTitle: false,
+          automaticallyImplyLeading: false,
+          titleSpacing: 0,
+          toolbarHeight: kToolbarHeight + 20,
+          title: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const SizedBox(width: 140),
+              const Text(
+                'اختر زبوناً لعرض الفاتورة',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+              ),
+              ExitButton(
+                onPressed: () => Navigator.of(context).pop(),
+              ),
+            ],
+          ),
+          centerTitle: true,
           backgroundColor: Colors.indigo[700],
           foregroundColor: Colors.white,
         ),
@@ -111,7 +127,8 @@ class _CustomerSelectionScreenState extends State<CustomerSelectionScreen> {
                       final customerName = _filteredCustomers[index];
                       return ListTile(
                         title: Text(customerName,
-                            style: const TextStyle(fontSize: 18)),
+                            style: const TextStyle(
+                                fontSize: 18, color: Colors.black)),
                         leading: const Icon(Icons.person, color: Colors.indigo),
                         onTap: () {
                           // إخفاء لوحة المفاتيح عند الانتقال
