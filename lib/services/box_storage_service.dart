@@ -219,4 +219,72 @@ class BoxStorageService {
       return '1';
     }
   }
+
+  /// إضافة سطر عتالة آلياً إلى يومية الصندوق لنفس التاريخ
+  /// قيمة العتالة تُسجّل في حقل "المدفوع" (paid)
+  Future<bool> addPortageEntry({
+    required String date,
+    required String supplierName,
+    required double portageValue,
+    required String sellerName,
+    String storeName = '',
+    String dayName = '',
+  }) async {
+    try {
+      // 1. تحميل يومية الصندوق الحالية (إن وُجدت)
+      BoxDocument? existing = await loadBoxDocumentForDate(date);
+
+      final List<BoxTransaction> transactions =
+          existing != null ? List.from(existing.transactions) : [];
+
+      // 2. تحديد الرقم التسلسلي للسطر الجديد
+      final nextSerial = (transactions.length + 1).toString();
+
+      // 3. إنشاء سطر العتالة
+      final portageRow = BoxTransaction(
+        serialNumber: nextSerial,
+        received: '',
+        paid: portageValue.toStringAsFixed(2), // العتالة في المدفوع
+        accountType: 'عتالة',
+        accountName: supplierName,
+        notes: 'عتالة فاتورة المورد $supplierName',
+        sellerName: sellerName,
+      );
+
+      transactions.add(portageRow);
+
+      // 4. إعادة حساب المجاميع
+      double totalReceived = 0;
+      double totalPaid = 0;
+      for (final t in transactions) {
+        totalReceived += double.tryParse(t.received) ?? 0;
+        totalPaid += double.tryParse(t.paid) ?? 0;
+      }
+
+      final recordNumber =
+          existing?.recordNumber ?? await getNextJournalNumber();
+
+      final updatedDoc = BoxDocument(
+        recordNumber: recordNumber,
+        date: date,
+        sellerName: existing?.sellerName ?? sellerName,
+        storeName: existing?.storeName ?? storeName,
+        dayName: existing?.dayName ?? dayName,
+        transactions: transactions,
+        totals: {
+          'totalReceived': totalReceived.toStringAsFixed(2),
+          'totalPaid': totalPaid.toStringAsFixed(2),
+          'balance': (totalReceived - totalPaid).toStringAsFixed(2),
+        },
+      );
+
+      // 5. الحفظ
+      return await saveBoxDocument(updatedDoc);
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('❌ خطأ في إضافة سطر العتالة للصندوق: $e');
+      }
+      return false;
+    }
+  }
 }

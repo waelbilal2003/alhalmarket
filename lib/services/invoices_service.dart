@@ -5,6 +5,7 @@ import '../models/purchase_model.dart';
 import 'sales_storage_service.dart';
 import 'receipt_storage_service.dart';
 import 'purchase_storage_service.dart';
+import '../models/supplier_invoice_model.dart';
 
 // نموذج يحتوي على كل البيانات المطلوبة لشاشة المورد
 class SupplierReportData {
@@ -192,5 +193,142 @@ class InvoicesService {
     }).toList();
 
     return supplierPurchases;
+  }
+
+  // 4. دالة بناء فاتورة المورد الكاملة وفق الشرط (المورد + س + التاريخ)
+  Future<SupplierInvoice> generateSupplierInvoice(
+    String date,
+    String supplierName,
+    String sValue,
+  ) async {
+    final cleanSupplier = supplierName.trim();
+    final cleanS = sValue.trim();
+
+    // مفتاح التجميع: المادة + السعر
+    final Map<String, GroupedSaleLine> salesGroups = {};
+    // تجميع المباع لكل مادة (للمقارنة)
+    final Map<String, double> salesCountByMaterial = {};
+    double totalSalesValue = 0;
+
+    // ===== أ) المبيعات: فلترة بـ (المورد + س) ثم تجميع بـ (المادة + السعر) =====
+    final SalesDocument? salesDoc =
+        await _salesStorageService.loadSalesDocument(date);
+
+    if (salesDoc != null) {
+      for (final sale in salesDoc.sales) {
+        final matchSupplier = sale.affiliation.trim() == cleanSupplier;
+        final matchS = sale.sValue.trim() == cleanS;
+        if (!matchSupplier || !matchS) continue;
+
+        final material = sale.material.trim();
+        final price = sale.price.trim();
+        final key = '$material||$price'; // فاصل آمن لتمييز المادة عن السعر
+
+        final count = double.tryParse(sale.count) ?? 0;
+        final standing = double.tryParse(sale.standing) ?? 0;
+        final net = double.tryParse(sale.net) ?? 0;
+        final value = double.tryParse(sale.total) ?? 0;
+
+        totalSalesValue += value;
+        salesCountByMaterial.update(
+          material,
+          (v) => v + count,
+          ifAbsent: () => count,
+        );
+
+        if (salesGroups.containsKey(key)) {
+          final g = salesGroups[key]!;
+          salesGroups[key] = g.copyWith(
+            totalCount: g.totalCount + count,
+            totalStanding: g.totalStanding + standing,
+            totalNet: g.totalNet + net,
+            totalValue: g.totalValue + value,
+            recordsCount: g.recordsCount + 1,
+          );
+        } else {
+          salesGroups[key] = GroupedSaleLine(
+            material: material,
+            price: price,
+            totalCount: count,
+            totalStanding: standing,
+            totalNet: net,
+            totalValue: value,
+            recordsCount: 1,
+          );
+        }
+      }
+    }
+
+    // ===== ب) الاستلام: فلترة بـ (المورد + س)، جمع الحمولة والدفعة، وعدّ المستلم =====
+    final Map<String, double> receiptCountByMaterial = {};
+    double totalLoad = 0;
+    double totalPayment = 0;
+
+    final ReceiptDocument? receiptDoc =
+        await _receiptStorageService.loadReceiptDocumentForDate(date);
+
+    if (receiptDoc != null) {
+      for (final receipt in receiptDoc.receipts) {
+        final matchSupplier = receipt.affiliation.trim() == cleanSupplier;
+        final matchS = receipt.sValue.trim() == cleanS;
+        if (!matchSupplier || !matchS) continue;
+
+        final material = receipt.material.trim();
+        final count = double.tryParse(receipt.count) ?? 0;
+
+        receiptCountByMaterial.update(
+          material,
+          (v) => v + count,
+          ifAbsent: () => count,
+        );
+
+        totalLoad += double.tryParse(receipt.load) ?? 0;
+        totalPayment += double.tryParse(receipt.payment) ?? 0;
+      }
+    }
+
+    // ===== ج) بناء جدول المقارنة (كل المواد من الطرفين) =====
+    final allMaterials = <String>{
+      ...salesCountByMaterial.keys,
+      ...receiptCountByMaterial.keys,
+    };
+
+    final comparison = allMaterials.map((material) {
+      final recv = receiptCountByMaterial[material] ?? 0;
+      final sold = salesCountByMaterial[material] ?? 0;
+      return SupplierComparisonLine(
+        material: material,
+        receiptCount: recv,
+        salesCount: sold,
+        difference: recv - sold,
+      );
+    }).toList()
+      ..sort((a, b) => a.material.compareTo(b.material));
+
+    // ترتيب جدول المبيعات المجمّع
+    final groupedList = salesGroups.values.toList()
+      ..sort((a, b) {
+        final byMaterial = a.material.compareTo(b.material);
+        if (byMaterial != 0) return byMaterial;
+        final pa = double.tryParse(a.price) ?? 0;
+        final pb = double.tryParse(b.price) ?? 0;
+        return pa.compareTo(pb);
+      });
+
+    return SupplierInvoice(
+      supplierName: cleanSupplier,
+      sValue: cleanS,
+      date: date,
+      groupedSales: groupedList,
+      comparison: comparison,
+      totalSalesValue: totalSalesValue,
+      loadValue: totalLoad, // قابلة للتعديل في الواجهة
+      paymentValue: totalPayment, // قابلة للتعديل في الواجهة
+    );
+  }
+
+  /// حساب قيمة المعلوم من النسبة: (إجمالي المبيعات × النسبة) ÷ 100
+  double calculateMaloom(double totalSalesValue, double percent) {
+    return (totalSalesValue * percent) / 100;
   }
 }
