@@ -155,7 +155,7 @@ class _MyAppState extends State<MyApp> {
 }
 
 /*
-// الكود المعلق الأول - النسخة مع نظام التفعيل
+// الكود المعلق الأول  النسخة مع نظام التفعيل
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
