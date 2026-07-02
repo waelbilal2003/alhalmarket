@@ -251,7 +251,14 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
 
       List<FocusNode> newFocusNodes = List.generate(9, (index) => FocusNode());
 
-      newControllers[0].text = newSerialNumber;
+      // العمود 0 أصبح للعتالة، نضعه فارغاً أو بقيمة افتراضية
+      newControllers[0].text = '0.00'; // <-- قيمة افتراضية للعتالة
+
+      // نضيف مستمع للعتالة (العمود 0) لحساب المجاميع إذا لزم الأمر
+      newControllers[0].addListener(() {
+        _hasUnsavedChanges = true;
+        _calculateAllTotals();
+      });
 
       _addChangeListenersToControllers(newControllers, rowControllers.length);
       sellerNames.add(widget.sellerName);
@@ -261,7 +268,6 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
 
     _attachFocusListeners(rowControllers.length - 1);
 
-    // تأخير لضمان بناء الواجهة
     Future.delayed(const Duration(milliseconds: 50), () {
       if (mounted && rowFocusNodes.isNotEmpty) {
         final newRowIndex = rowFocusNodes.length - 1;
@@ -293,6 +299,11 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
   // دالة مساعدة لإضافة المستمعات
   void _addChangeListenersToControllers(
       List<TextEditingController> controllers, int rowIndex) {
+    controllers[0].addListener(() {
+      // العتالة
+      _hasUnsavedChanges = true;
+      _calculateAllTotals();
+    });
     controllers[1].addListener(() {
       // المادة
       _hasUnsavedChanges = true;
@@ -303,7 +314,6 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
       _hasUnsavedChanges = true;
       _updateSupplierSuggestions(rowIndex);
     });
-    // لا نحتاج مستمع خاص لـ س (controllers[3]) لأنه لا يؤثر على المجاميع
     controllers[4].addListener(() {
       // العدد
       _hasUnsavedChanges = true;
@@ -603,7 +613,7 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
       for (int i = 0; i < document.receipts.length; i++) {
         var receipt = document.receipts[i];
         List<TextEditingController> newControllers = [
-          TextEditingController(text: receipt.serialNumber),
+          TextEditingController(text: receipt.portage),
           TextEditingController(text: receipt.material),
           TextEditingController(text: receipt.affiliation),
           TextEditingController(text: receipt.sValue),
@@ -670,7 +680,6 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
   Widget _buildTableHeader() {
     return Table(
       defaultColumnWidth: const FlexColumnWidth(),
-      // <-- إضافة عرض الأعمدة
       columnWidths: const {
         3: FixedColumnWidth(30.0),
       },
@@ -679,10 +688,10 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
         TableRow(
           decoration: BoxDecoration(color: Colors.grey[200]),
           children: [
-            TableComponents.buildTableHeaderCell('مسلسل'),
+            TableComponents.buildTableHeaderCell('العتالة'), // <-- تغيير
             TableComponents.buildTableHeaderCell('المادة'),
             TableComponents.buildTableHeaderCell('العائدية'),
-            TableComponents.buildTableHeaderCell('س'), // <-- الحقل الجديد
+            TableComponents.buildTableHeaderCell('س'),
             TableComponents.buildTableHeaderCell('العدد'),
             TableComponents.buildTableHeaderCell('العبوة'),
             TableComponents.buildTableHeaderCell('القائم'),
@@ -701,15 +710,15 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
       contentRows.add(
         TableRow(
           children: [
-            _buildTableCell(rowControllers[i][0], rowFocusNodes[i][0], i, 0,
-                isOwnedByCurrentSeller),
+            _buildPortageCell(rowControllers[i][0], rowFocusNodes[i][0], i, 0,
+                isOwnedByCurrentSeller), // <-- دالة جديدة للعتالة
             _buildMaterialCell(rowControllers[i][1], rowFocusNodes[i][1], i, 1,
                 isOwnedByCurrentSeller),
             _buildSupplierCell(rowControllers[i][2], rowFocusNodes[i][2], i, 2,
                 isOwnedByCurrentSeller),
             _buildTableCell(rowControllers[i][3], rowFocusNodes[i][3], i, 3,
                 isOwnedByCurrentSeller,
-                isSField: true), // <-- الحقل الجديد
+                isSField: true),
             _buildTableCell(rowControllers[i][4], rowFocusNodes[i][4], i, 4,
                 isOwnedByCurrentSeller),
             _buildPackagingCell(rowControllers[i][5], rowFocusNodes[i][5], i, 5,
@@ -732,7 +741,7 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
             _buildEmptyCell(),
             _buildEmptyCell(),
             _buildEmptyCell(),
-            _buildEmptyCell(), // خلية فارغة لـ "س"
+            _buildEmptyCell(),
             TableComponents.buildTotalCell(totalCountController),
             _buildEmptyCell(),
             TableComponents.buildTotalCell(totalStandingController),
@@ -744,7 +753,6 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
     }
     return Table(
       defaultColumnWidth: const FlexColumnWidth(),
-      // <-- إضافة عرض الأعمدة
       columnWidths: const {
         3: FixedColumnWidth(30.0),
       },
@@ -861,7 +869,10 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
   void _handleFieldSubmitted(String value, int rowIndex, int colIndex) {
     if (!_canEditRow(rowIndex)) return;
 
-    if (colIndex == 1) {
+    if (colIndex == 0) {
+      // العتالة ← ننتقل إلى المادة
+      FocusScope.of(context).requestFocus(rowFocusNodes[rowIndex][1]);
+    } else if (colIndex == 1) {
       // المادة
       if (_materialSuggestions.isNotEmpty) {
         _selectMaterialSuggestion(_materialSuggestions[0], rowIndex);
@@ -885,58 +896,46 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
       }
       if (value.trim().length > 1) _savePackagingToIndex(value);
       FocusScope.of(context).requestFocus(rowFocusNodes[rowIndex][6]);
-    } else if (colIndex == 0) {
-      // مسلسل
-      FocusScope.of(context).requestFocus(rowFocusNodes[rowIndex][1]);
     } else if (colIndex == 8) {
-      // الحمولة - إنشاء صف جديد والتركيز على المادة
+      // الحمولة - إنشاء صف جديد
       _addNewRow();
-      // لا نحتاج لتحديد التركيز هنا لأن _addNewRow ستقوم بذلك عبر addPostFrameCallback
-      // لكننا نضمن تحديث المؤشرات
-      if (rowControllers.isNotEmpty) {
-        final newRowIndex = rowControllers.length - 1;
-        // نستخدم Future.delayed لضمان التنفيذ بعد addPostFrameCallback في _addNewRow
-        Future.delayed(const Duration(milliseconds: 100), () {
-          if (mounted && newRowIndex < rowFocusNodes.length) {
-            _currentFocusRow = newRowIndex;
-            _currentFocusCol = 1;
-            FocusScope.of(context).requestFocus(rowFocusNodes[newRowIndex][1]);
-            _scrollToField(newRowIndex, 1);
-            _adjustScrollPosition(newRowIndex);
-          }
-        });
-      }
+      Future.delayed(const Duration(milliseconds: 100), () {
+        if (mounted && rowControllers.isNotEmpty) {
+          final newRowIndex = rowControllers.length - 1;
+          _currentFocusRow = newRowIndex;
+          _currentFocusCol = 1;
+          FocusScope.of(context).requestFocus(rowFocusNodes[newRowIndex][1]);
+          _scrollToField(newRowIndex, 1);
+          _adjustScrollPosition(newRowIndex);
+        }
+      });
     }
     _hideAllSuggestionsImmediately();
   }
 
   void _handleFieldChanged(String value, int rowIndex, int colIndex) {
-    // التحقق إذا كان السجل مملوكاً للبائع الحالي
-    if (!_canEditRow(rowIndex)) {
-      return;
-    }
+    if (!_canEditRow(rowIndex)) return;
 
     setState(() {
       _hasUnsavedChanges = true;
 
-      if (colIndex == 0) {
-        for (int i = 0; i < rowControllers.length; i++) {
-          rowControllers[i][0].text = (i + 1).toString();
-        }
+      // تحديث المجاميع للحقول الرقمية (بما فيها العتالة)
+      if (colIndex == 0 ||
+          colIndex == 3 ||
+          colIndex == 5 ||
+          colIndex == 6 ||
+          colIndex == 7 ||
+          colIndex == 8) {
+        _calculateAllTotals();
       }
 
-      // إذا بدأ المستخدم بالكتابة في حقل آخر، إخفاء اقتراحات الحقول الأخرى
+      // إخفاء الاقتراحات عند الكتابة في حقول أخرى
       if (colIndex == 1 && _activeMaterialRowIndex != rowIndex) {
         _clearAllSuggestions();
       } else if (colIndex == 2 && _activeSupplierRowIndex != rowIndex) {
         _clearAllSuggestions();
       } else if (colIndex == 4 && _activePackagingRowIndex != rowIndex) {
         _clearAllSuggestions();
-      }
-
-      // تحديث المجاميع للحقول الرقمية
-      if (colIndex == 3 || colIndex == 5 || colIndex == 6 || colIndex == 7) {
-        _calculateAllTotals();
       }
     });
   }
@@ -1458,6 +1457,7 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
           payment: controllers[7].text,
           load: controllers[8].text,
           sellerName: sellerNames[i],
+          portage: controllers[0].text,
         ));
       }
     }
@@ -1725,7 +1725,7 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
                           _buildPdfHeaderCell('س', headerTextColor),
                           _buildPdfHeaderCell('العائدية', headerTextColor),
                           _buildPdfHeaderCell('المادة', headerTextColor),
-                          _buildPdfHeaderCell('ت', headerTextColor),
+                          _buildPdfHeaderCell('العتالة', headerTextColor),
                         ],
                       ),
                       ...rowControllers.asMap().entries.map((entry) {
@@ -1749,7 +1749,7 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
                             _buildPdfCell(controllers[3].text),
                             _buildPdfCell(controllers[2].text),
                             _buildPdfCell(controllers[1].text),
-                            _buildPdfCell(controllers[0].text),
+                            _buildPdfCell(controllers[0].text)
                           ],
                         );
                       }).toList(),
@@ -1891,6 +1891,33 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
       }
     }
     if (mounted) setState(() => _grandTotal = total);
+  }
+
+  Widget _buildPortageCell(
+      TextEditingController controller,
+      FocusNode focusNode,
+      int rowIndex,
+      int colIndex,
+      bool isOwnedByCurrentSeller) {
+    return TableBuilder.buildTableCell(
+      controller: controller,
+      focusNode: focusNode,
+      enabled: _canEditRow(rowIndex),
+      isSerialField: false,
+      isNumericField: true, // <-- معاملة كحقل رقمي
+      rowIndex: rowIndex,
+      colIndex: colIndex,
+      scrollToField: _scrollToField,
+      onFieldSubmitted: _handleFieldSubmitted,
+      onFieldChanged: _handleFieldChanged,
+      isSField: false,
+      inputFormatters: [
+        FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]')), // أرقام وفواصل
+      ],
+      fontSize: 16,
+      textAlign: TextAlign.center,
+      textDirection: TextDirection.ltr,
+    );
   }
 }
 

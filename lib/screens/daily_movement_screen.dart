@@ -14,6 +14,7 @@ import 'account_summary_screen.dart';
 import 'backup_screen_state.dart';
 import 'package:flutter/services.dart';
 import '../widgets/exit_button.dart';
+import '../widgets/shared_menu_button.dart';
 
 class DailyMovementScreen extends StatefulWidget {
   final String selectedDate;
@@ -31,7 +32,8 @@ class DailyMovementScreen extends StatefulWidget {
   State<DailyMovementScreen> createState() => _DailyMovementScreenState();
 }
 
-class _DailyMovementScreenState extends State<DailyMovementScreen> {
+class _DailyMovementScreenState extends State<DailyMovementScreen>
+    with MenuNavigationMixin {
   String _storeName = '';
 
   // متغيرات نظام التحكم بالأسهم والمؤشر الذهبي
@@ -48,14 +50,16 @@ class _DailyMovementScreenState extends State<DailyMovementScreen> {
     super.initState();
     _loadStoreName();
     _initButtons();
-    _focusNodes = List.generate(_buttons.length, (_) => FocusNode());
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) {
-        _focusNodes[0].requestFocus();
-        _focusedIndex = 0;
-        setState(() {});
-      }
-    });
+    // استخدم الدالة من المزيج بدلاً من التهيئة اليدوية
+    initMenuNavigation(_buttons.length);
+    // احذف الكود القديم لتهيئة focusNodes وطلب التركيز
+  }
+
+  @override
+  void dispose() {
+    // استخدم الدالة من المزيج
+    disposeMenuNavigation();
+    super.dispose();
   }
 
   void _initButtons() {
@@ -119,6 +123,7 @@ class _DailyMovementScreenState extends State<DailyMovementScreen> {
               builder: (context) => InvoiceTypeSelectionScreen(
                 selectedDate: widget.selectedDate,
                 storeName: _storeName,
+                sellerName: widget.sellerName,
               ),
             ),
           );
@@ -228,15 +233,6 @@ class _DailyMovementScreenState extends State<DailyMovementScreen> {
     ];
   }
 
-  @override
-  void dispose() {
-    for (var node in _focusNodes) {
-      node.dispose();
-    }
-    _globalFocusNode.dispose();
-    super.dispose();
-  }
-
   Future<void> _loadStoreName() async {
     final storeDbService = StoreDbService();
     final savedStoreName = await storeDbService.getStoreName();
@@ -252,22 +248,14 @@ class _DailyMovementScreenState extends State<DailyMovementScreen> {
   // ============== نظام التحكم بلوحة المفاتيح ==============
 
   void _handleKeyEvent(RawKeyEvent event) {
-    if (event is! RawKeyDownEvent) return;
-
-    final key = event.logicalKey;
-
-    if (key == LogicalKeyboardKey.arrowLeft) {
-      _moveFocusLeft();
-    } else if (key == LogicalKeyboardKey.arrowRight) {
-      _moveFocusRight();
-    } else if (key == LogicalKeyboardKey.arrowUp) {
-      _moveFocusUp();
-    } else if (key == LogicalKeyboardKey.arrowDown) {
-      _moveFocusDown();
-    } else if (key == LogicalKeyboardKey.enter ||
-        key == LogicalKeyboardKey.space) {
-      _executeCurrentFocus();
-    } else if (key == LogicalKeyboardKey.escape) {
+    handleKeyEvent(event, _buttons.length);
+    // تنفيذ الزر الحالي عند الضغط على Enter
+    if (event is RawKeyDownEvent &&
+        (event.logicalKey == LogicalKeyboardKey.enter ||
+            event.logicalKey == LogicalKeyboardKey.space)) {
+      executeButtonAt(focusedIndex, _buttons);
+    } else if (event is RawKeyDownEvent &&
+        event.logicalKey == LogicalKeyboardKey.escape) {
       _handleBackButton();
     }
   }
@@ -422,7 +410,7 @@ class _DailyMovementScreenState extends State<DailyMovementScreen> {
                 index: 0,
               ),
             ),
-            const SizedBox(width: 8.0),
+            const SizedBox(width: 8.0), // <-- إضافة التباعد
             Expanded(
               child: _buildMenuButton(
                 context,
@@ -555,9 +543,6 @@ class _DailyMovementScreenState extends State<DailyMovementScreen> {
     required int index,
   }) {
     final isServicesButton = label.contains('الخدمات');
-    final hasFocus = _focusedIndex == index;
-    final buttonHeight = (MediaQuery.of(context).size.width / 4) / 1.5;
-
     return FutureBuilder<bool>(
       future: isServicesButton
           ? _isAdminSeller(widget.sellerName)
@@ -566,210 +551,24 @@ class _DailyMovementScreenState extends State<DailyMovementScreen> {
         final isAdmin = snapshot.data ?? false;
         final isEnabled = !isServicesButton || isAdmin;
 
-        return AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
-          transform: Matrix4.identity()..scale(hasFocus ? 1.05 : 1.0),
-          child: Material(
-            elevation: hasFocus ? 20 : 8,
-            borderRadius: BorderRadius.circular(20),
-            shadowColor:
-                hasFocus ? const Color(0xFFFFD700) : color.withOpacity(0.5),
-            child: InkWell(
-              onTap: isEnabled
-                  ? () {
-                      _setFocus(index);
-                      final button = _buttons[index];
-                      if (button['onTap'] != null) {
-                        (button['onTap'] as VoidCallback)();
-                      }
-                    }
-                  : null,
-              borderRadius: BorderRadius.circular(20),
-              child: Container(
-                height: buttonHeight,
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: hasFocus
-                        ? [
-                            const Color(0xFF1B5E20), // أخضر غامق
-                            const Color(0xFF2E7D32), // أخضر متوسط
-                            const Color(0xFF388E3C), // أخضر فاتح
-                            const Color(0xFF4CAF50), // أخضر ساطع
-                          ]
-                        : [
-                            isEnabled ? color : Colors.grey[400]!,
-                            isEnabled
-                                ? color.withOpacity(0.7)
-                                : Colors.grey[300]!,
-                          ],
-                    stops: hasFocus ? const [0.0, 0.3, 0.7, 1.0] : null,
-                  ),
-                  borderRadius: BorderRadius.circular(20),
-                  border: hasFocus
-                      ? Border.all(
-                          color: const Color(0xFFFFD700), // إطار ذهبي
-                          width: 6)
-                      : Border.all(
-                          color: const Color.fromARGB(0, 241, 66, 66),
-                          width: 4),
-                  boxShadow: hasFocus
-                      ? [
-                          // تأثير التوهج الذهبي والأخضر
-                          BoxShadow(
-                            color: const Color(0xFFFFD700)
-                                .withOpacity(0.8), // ذهبي
-                            blurRadius: 30,
-                            spreadRadius: 5,
-                            offset: const Offset(0, 0),
-                          ),
-                          BoxShadow(
-                            color: const Color(0xFF4CAF50)
-                                .withOpacity(0.5), // أخضر
-                            blurRadius: 20,
-                            spreadRadius: 2,
-                            offset: const Offset(0, 8),
-                          ),
-                          BoxShadow(
-                            color: const Color(0xFF81C784)
-                                .withOpacity(0.4), // أخضر فاتح
-                            blurRadius: 40,
-                            spreadRadius: 8,
-                            offset: const Offset(0, 0),
-                          ),
-                        ]
-                      : isEnabled
-                          ? [
-                              BoxShadow(
-                                color: color.withOpacity(0.3),
-                                blurRadius: 12,
-                                offset: const Offset(0, 4),
-                              ),
-                            ]
-                          : null,
-                ),
-                child: Stack(
-                  children: [
-                    // تأثير الإطار اللامع
-                    if (hasFocus)
-                      Positioned(
-                        top: -2,
-                        left: -2,
-                        right: -2,
-                        bottom: -2,
-                        child: Container(
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(22),
-                            gradient: LinearGradient(
-                              colors: [
-                                const Color(0xFFFFD700)
-                                    .withOpacity(0.6), // ذهبي
-                                const Color(0xFFFFF176)
-                                    .withOpacity(0.4), // أصفر فاتح
-                                const Color(0xFF4CAF50)
-                                    .withOpacity(0.5), // أخضر
-                                const Color(0xFFFFD700)
-                                    .withOpacity(0.6), // ذهبي
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                    Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          AnimatedRotation(
-                            turns: hasFocus ? 0.05 : 0.0,
-                            duration: const Duration(milliseconds: 300),
-                            child: AnimatedScale(
-                              scale: hasFocus ? 1.2 : 1.0,
-                              duration: const Duration(milliseconds: 300),
-                              child: Icon(
-                                icon,
-                                size: hasFocus ? 85 : 70,
-                                color: hasFocus
-                                    ? const Color(0xFFFFD700) // أيقونة ذهبية
-                                    : (isEnabled
-                                        ? Colors.white
-                                        : Colors.grey[200]),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            label,
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              color: hasFocus
-                                  ? const Color(0xFFFFF9C4) // نص أصفر فاتح
-                                  : (isEnabled
-                                      ? Colors.white
-                                      : Colors.grey[200]),
-                              fontSize: hasFocus ? 30 : 25,
-                              fontWeight: FontWeight.bold,
-                              letterSpacing: hasFocus ? 1.5 : 1.0,
-                              shadows: hasFocus
-                                  ? [
-                                      Shadow(
-                                        color: const Color(0xFFFFD700)
-                                            .withOpacity(0.9), // ظل ذهبي
-                                        blurRadius: 15,
-                                      ),
-                                      const Shadow(
-                                        color: Colors.black54,
-                                        blurRadius: 4,
-                                      ),
-                                    ]
-                                  : null,
-                            ),
-                          ),
-                          if (isServicesButton && isAdmin)
-                            Padding(
-                              padding: const EdgeInsets.only(top: 4.0),
-                              child: Icon(
-                                Icons.star,
-                                size: hasFocus ? 35 : 30,
-                                color: hasFocus
-                                    ? const Color(0xFFFFD700) // نجمة ذهبية
-                                    : Colors.yellow,
-                              ),
-                            ),
-                          if (hasFocus)
-                            Padding(
-                              padding: const EdgeInsets.only(top: 15),
-                              child: Container(
-                                width: 60,
-                                height: 5,
-                                decoration: BoxDecoration(
-                                  gradient: const LinearGradient(
-                                    colors: [
-                                      Color(0xFFFFD700), // ذهبي
-                                      Color(0xFFFFF176), // أصفر فاتح
-                                      Color(0xFF4CAF50), // أخضر
-                                    ],
-                                  ),
-                                  borderRadius: BorderRadius.circular(5),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: const Color(0xFFFFD700)
-                                          .withOpacity(0.9),
-                                      blurRadius: 10,
-                                      spreadRadius: 2,
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
+        return SharedMenuButton(
+          icon: icon,
+          label: label,
+          color: color,
+          isFocused: focusedIndex == index,
+          isEnabled: isEnabled,
+          showAdminStar: isServicesButton && isAdmin,
+          onTap: isEnabled
+              ? () {
+                  setState(() {
+                    focusedIndex = index;
+                  });
+                  final button = _buttons[index];
+                  if (button['onTap'] != null) {
+                    (button['onTap'] as VoidCallback)();
+                  }
+                }
+              : null,
         );
       },
     );

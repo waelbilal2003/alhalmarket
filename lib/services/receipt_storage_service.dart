@@ -5,7 +5,6 @@ import '../models/receipt_model.dart';
 import 'package:flutter/foundation.dart';
 
 class ReceiptStorageService {
-  // ✅ المسار الجذري الموحد: Documenti/alhalmarket
   Future<String> _getBasePath() async {
     Directory? directory;
     if (Platform.isAndroid) {
@@ -21,21 +20,31 @@ class ReceiptStorageService {
     if (!await rootFolder.exists()) {
       await rootFolder.create(recursive: true);
     }
-
     return rootPath;
   }
 
-  // *** تعديل: هذه الدالة الآن هي الأساس وتعتمد على التاريخ فقط ***
   String _createFileName(String date) {
     final dateParts = date.split('/');
     final formattedDate = dateParts.join('-');
     return 'receipt-$formattedDate.json';
   }
 
+  // دالة مساعدة لتحويل ReceiptDocument إلى Map يدوياً
+  Map<String, dynamic> _documentToJson(ReceiptDocument doc) {
+    return {
+      'recordNumber': doc.recordNumber,
+      'date': doc.date,
+      'sellerName': doc.sellerName,
+      'storeName': doc.storeName,
+      'dayName': doc.dayName,
+      'receipts': doc.receipts.map((r) => r.toJson()).toList(),
+      'totals': doc.totals,
+    };
+  }
+
   Future<bool> saveReceiptDocument(ReceiptDocument document) async {
     try {
       final basePath = await _getBasePath();
-      // ✅ المسار الصحيح: alhalmarket/ReceiptJournals
       final folderPath = '$basePath/ReceiptJournals';
       final folder = Directory(folderPath);
       if (!await folder.exists()) await folder.create(recursive: true);
@@ -44,11 +53,7 @@ class ReceiptStorageService {
       final filePath = '$folderPath/$fileName';
       final file = File(filePath);
 
-      // منطق جديد: لا ندمج، بل نكتب فوق الملف مباشرة بالبيانات الجديدة
-      // شاشة الإدخال مسؤولة عن إرسال القائمة الكاملة والمحدثة للسجلات
-
-      final String finalRecordNumber;
-      // إذا كان المستند المُرسَل له رقم سجل، نستخدمه. وإلا، نتحقق من الملف أو ننشئ رقماً جديداً.
+      String finalRecordNumber;
       if (document.recordNumber.isNotEmpty && document.recordNumber != '1') {
         finalRecordNumber = document.recordNumber;
       } else {
@@ -62,11 +67,7 @@ class ReceiptStorageService {
         }
       }
 
-      // إعادة حساب المجاميع النهائية قبل الحفظ
-      double totalCount = 0;
-      double totalStanding = 0;
-      double totalPayment = 0;
-      double totalLoad = 0;
+      double totalCount = 0, totalStanding = 0, totalPayment = 0, totalLoad = 0;
       for (var receipt in document.receipts) {
         totalCount += double.tryParse(receipt.count) ?? 0;
         totalStanding += double.tryParse(receipt.standing) ?? 0;
@@ -77,10 +78,10 @@ class ReceiptStorageService {
       final documentToSave = ReceiptDocument(
         recordNumber: finalRecordNumber,
         date: document.date,
-        sellerName: document.sellerName, // اسم آخر بائع قام بالحفظ
+        sellerName: document.sellerName,
         storeName: document.storeName,
         dayName: document.dayName,
-        receipts: document.receipts, // القائمة الكاملة من شاشة الإدخال
+        receipts: document.receipts,
         totals: {
           'totalCount': totalCount.toStringAsFixed(0),
           'totalStanding': totalStanding.toStringAsFixed(2),
@@ -89,64 +90,48 @@ class ReceiptStorageService {
         },
       );
 
-      final jsonString = jsonEncode(documentToSave.toJson());
+      // استخدام الدالة المساعدة بدلاً من toJson مباشرة
+      final jsonString = jsonEncode(_documentToJson(documentToSave));
       await file.writeAsString(jsonString);
-
-      if (kDebugMode) {
-        debugPrint('✅ تم استبدال ملف الاستلام بنجاح: $filePath');
-      }
+      if (kDebugMode) debugPrint('✅ تم استبدال ملف الاستلام بنجاح: $filePath');
       return true;
     } catch (e) {
-      if (kDebugMode) {
-        debugPrint('❌ خطأ في حفظ ملف الاستلام: $e');
-      }
+      if (kDebugMode) debugPrint('❌ خطأ في حفظ ملف الاستلام: $e');
       return false;
     }
   }
 
+  // باقي الدوال كما هي ...
   Future<ReceiptDocument?> loadReceiptDocumentForDate(String date) async {
     try {
       final basePath = await _getBasePath();
-      // ✅ المسار الصحيح: alhalmarket/ReceiptJournals
       final folderPath = '$basePath/ReceiptJournals';
       final fileName = _createFileName(date);
       final filePath = '$folderPath/$fileName';
-
       final file = File(filePath);
-      if (!await file.exists()) {
-        return null;
-      }
+      if (!await file.exists()) return null;
 
       final jsonString = await file.readAsString();
       final jsonMap = jsonDecode(jsonString) as Map<String, dynamic>;
       return ReceiptDocument.fromJson(jsonMap);
     } catch (e) {
-      if (kDebugMode) {
-        debugPrint('❌ خطأ في قراءة يومية الاستلام: $e');
-      }
+      if (kDebugMode) debugPrint('❌ خطأ في قراءة يومية الاستلام: $e');
       return null;
     }
   }
 
-  // *** تمت إعادتها وتكييفها: تعمل الآن مع الهيكل الجديد ***
   Future<ReceiptDocument?> loadReceiptDocument(
       String date, String recordNumber) async {
-    // تتجاهل recordNumber لأن هناك ملف واحد فقط لكل يوم
     return await loadReceiptDocumentForDate(date);
   }
 
-  // *** تمت إعادتها وتكييفها: تعمل الآن مع الهيكل الجديد ***
   Future<List<String>> getAvailableRecords(String date) async {
     try {
       final document = await loadReceiptDocumentForDate(date);
-      if (document != null) {
-        return [document.recordNumber];
-      }
+      if (document != null) return [document.recordNumber];
       return [];
     } catch (e) {
-      if (kDebugMode) {
-        debugPrint('❌ خطأ في قراءة سجلات الاستلام: $e');
-      }
+      if (kDebugMode) debugPrint('❌ خطأ في قراءة سجلات الاستلام: $e');
       return [];
     }
   }
@@ -154,13 +139,9 @@ class ReceiptStorageService {
   Future<List<Map<String, String>>> getAvailableDatesWithNumbers() async {
     try {
       final basePath = await _getBasePath();
-      // ✅ المسار الصحيح: alhalmarket/ReceiptJournals
       final folderPath = '$basePath/ReceiptJournals';
-
       final folder = Directory(folderPath);
-      if (!await folder.exists()) {
-        return [];
-      }
+      if (!await folder.exists()) return [];
 
       final files = await folder.list().toList();
       final datesWithNumbers = <Map<String, String>>[];
@@ -178,12 +159,10 @@ class ReceiptStorageService {
             final date = jsonMap['date']?.toString() ?? '';
             final journalNumber = jsonMap['recordNumber']?.toString() ?? '1';
             if (date.isNotEmpty) {
-              datesWithNumbers.add({
-                'date': date,
-                'journalNumber': journalNumber,
-              });
+              datesWithNumbers
+                  .add({'date': date, 'journalNumber': journalNumber});
             }
-          } catch (e) {/* تجاهل الملفات التالفة */}
+          } catch (e) {}
         }
       }
 
@@ -195,9 +174,7 @@ class ReceiptStorageService {
 
       return datesWithNumbers;
     } catch (e) {
-      if (kDebugMode) {
-        debugPrint('❌ خطأ في قراءة تواريخ الاستلام: $e');
-      }
+      if (kDebugMode) debugPrint('❌ خطأ في قراءة تواريخ الاستلام: $e');
       return [];
     }
   }
@@ -208,16 +185,11 @@ class ReceiptStorageService {
       final folderPath = '$basePath/ReceiptJournals';
       final fileName = _createFileName(date);
       final filePath = '$folderPath/$fileName';
-
       final file = File(filePath);
-      if (await file.exists()) {
-        return filePath;
-      }
+      if (await file.exists()) return filePath;
       return null;
     } catch (e) {
-      if (kDebugMode) {
-        debugPrint('❌ خطأ في الحصول على مسار ملف الاستلام: $e');
-      }
+      if (kDebugMode) debugPrint('❌ خطأ في الحصول على مسار ملف الاستلام: $e');
       return null;
     }
   }
@@ -227,9 +199,7 @@ class ReceiptStorageService {
       final document = await loadReceiptDocumentForDate(date);
       return document?.recordNumber ?? '1';
     } catch (e) {
-      if (kDebugMode) {
-        debugPrint('❌ خطأ في الحصول على رقم يومية الاستلام: $e');
-      }
+      if (kDebugMode) debugPrint('❌ خطأ في الحصول على رقم يومية الاستلام: $e');
       return '1';
     }
   }
@@ -238,15 +208,11 @@ class ReceiptStorageService {
     try {
       final basePath = await _getBasePath();
       final folderPath = '$basePath/ReceiptJournals';
-
       final folder = Directory(folderPath);
-      if (!await folder.exists()) {
-        return '1';
-      }
+      if (!await folder.exists()) return '1';
 
       final files = await folder.list().toList();
       int maxJournalNumber = 0;
-
       for (var file in files) {
         if (file is File &&
             file.path.endsWith('.json') &&
@@ -259,17 +225,15 @@ class ReceiptStorageService {
             final jsonMap = jsonDecode(jsonString) as Map<String, dynamic>;
             final journalNumber =
                 int.tryParse(jsonMap['recordNumber'] ?? '0') ?? 0;
-            if (journalNumber > maxJournalNumber) {
+            if (journalNumber > maxJournalNumber)
               maxJournalNumber = journalNumber;
-            }
-          } catch (e) {/* تجاهل الملفات التالفة */}
+          } catch (e) {}
         }
       }
       return (maxJournalNumber + 1).toString();
     } catch (e) {
-      if (kDebugMode) {
+      if (kDebugMode)
         debugPrint('❌ خطأ في الحصول على الرقم التسلسلي التالي للاستلام: $e');
-      }
       return '1';
     }
   }

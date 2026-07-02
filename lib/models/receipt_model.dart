@@ -9,6 +9,7 @@ class Receipt {
   final String payment;
   final String load;
   final String sellerName;
+  final String portage; // <-- الحقل الجديد (العتالة)
 
   Receipt({
     required this.serialNumber,
@@ -21,9 +22,9 @@ class Receipt {
     required this.payment,
     required this.load,
     required this.sellerName,
+    this.portage = '0.00', // القيمة الافتراضية
   });
 
-  // *** إضافة دالة copyWith هنا ***
   Receipt copyWith({
     String? serialNumber,
     String? material,
@@ -35,6 +36,7 @@ class Receipt {
     String? payment,
     String? load,
     String? sellerName,
+    String? portage,
   }) {
     return Receipt(
       serialNumber: serialNumber ?? this.serialNumber,
@@ -47,6 +49,7 @@ class Receipt {
       payment: payment ?? this.payment,
       load: load ?? this.load,
       sellerName: sellerName ?? this.sellerName,
+      portage: portage ?? this.portage,
     );
   }
 
@@ -62,6 +65,7 @@ class Receipt {
       payment: json['payment'] ?? '',
       load: json['load'] ?? '',
       sellerName: json['sellerName'] ?? '',
+      portage: json['portage'] ?? '0.00',
     );
   }
 
@@ -77,6 +81,7 @@ class Receipt {
       'payment': payment,
       'load': load,
       'sellerName': sellerName,
+      'portage': portage,
     };
   }
 }
@@ -113,17 +118,5 @@ class ReceiptDocument {
           [],
       totals: Map<String, String>.from(json['totals'] ?? {}),
     );
-  }
-
-  Map<String, dynamic> toJson() {
-    return {
-      'recordNumber': recordNumber,
-      'date': date,
-      'sellerName': sellerName,
-      'storeName': storeName,
-      'dayName': dayName,
-      'receipts': receipts.map((r) => r.toJson()).toList(),
-      'totals': totals,
-    };
   }
 }
